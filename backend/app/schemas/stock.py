@@ -13,39 +13,39 @@ from pydantic import BaseModel, Field, field_validator
 
 class StockCreate(BaseModel):
     name: str = Field(min_length=1)
+    sku: Optional[str] = None
+
     unit: str = Field(min_length=1)
     unit_price: float = Field(ge=0)
     quantity_available: float = Field(ge=0)
+
+    low_stock_threshold: float = Field(default=0, ge=0)
+
     aliases: list[str] = Field(default_factory=list)
 
-    @field_validator("name", "unit")
-    @classmethod
-    def _not_blank(cls, value: str) -> str:
-        value = value.strip()
-        if not value:
-            raise ValueError("must not be blank")
-        return value
-
-
 class StockUpdate(BaseModel):
-    """PATCH payload. Every field is optional; only fields explicitly
-    provided by the caller are applied (see model_dump(exclude_unset=True)
-    in StockService.update_stock)."""
-
     name: Optional[str] = Field(default=None, min_length=1)
+    sku: Optional[str] = None
+
     unit: Optional[str] = Field(default=None, min_length=1)
     unit_price: Optional[float] = Field(default=None, ge=0)
     quantity_available: Optional[float] = Field(default=None, ge=0)
+
+    low_stock_threshold: Optional[float] = Field(default=None, ge=0)
+
     aliases: Optional[list[str]] = None
-
-
+    
 class StockRead(BaseModel):
     id: uuid.UUID
     name: str
+    sku: Optional[str]
     aliases: list[str]
+
     unit: str
     unit_price: float
     quantity_available: float
+    low_stock_threshold: float
+
     created_at: datetime
     updated_at: datetime
 

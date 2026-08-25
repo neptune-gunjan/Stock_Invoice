@@ -36,6 +36,14 @@ class Settings(BaseSettings):
     transaction_data_file: Path = Path("data/transactions.json")
     transaction_items_data_file: Path = Path("data/transaction_items.json")
 
+    invoice_storage_backend: str = "json_file"
+    invoice_data_file: Path = Path("data/invoices.json")
+    invoice_number_prefix: str = "INV"
+
+    stock_movement_storage_backend: str = "json_file"
+    stock_movement_data_file: Path = Path("data/stock_movements.json")
+
+
     upload_dir: Path = Path("uploads")
 
     # Which ExtractionProvider implementation to use. See

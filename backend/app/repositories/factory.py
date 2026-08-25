@@ -22,6 +22,10 @@ from app.repositories.stock import StockRepository
 from app.repositories.stock_json import JsonFileStockRepository
 from app.repositories.transaction import TransactionRepository
 from app.repositories.transaction_json import JsonFileTransactionRepository
+from app.repositories.stock_movement import StockMovementRepository
+from app.repositories.json_stock_movement import JsonFileStockMovementRepository
+from app.repositories.invoice import InvoiceRepository
+from app.repositories.json_invoice import JsonFileInvoiceRepository
 
 
 def build_stock_repository(settings: Settings) -> StockRepository:
@@ -57,11 +61,40 @@ def build_transaction_repository(settings: Settings) -> TransactionRepository:
         )
     raise ValueError(f"Unknown transaction_storage_backend: {settings.transaction_storage_backend!r}")
 
+def build_invoice_repository(settings: Settings) -> InvoiceRepository:
+    if settings.invoice_storage_backend == "json_file":
+        return JsonFileInvoiceRepository(settings.invoice_data_file)
+
+    raise ValueError(
+        f"Unknown invoice_storage_backend: {settings.invoice_storage_backend!r}"
+    )
+
+
+@lru_cache
+def get_invoice_repository() -> InvoiceRepository:
+    return build_invoice_repository(get_settings())
+
 
 @lru_cache
 def get_transaction_repository() -> TransactionRepository:
     return build_transaction_repository(get_settings())
 
+def build_stock_movement_repository(
+    settings: Settings,
+) -> StockMovementRepository:
+    if settings.stock_movement_storage_backend == "json_file":
+        return JsonFileStockMovementRepository(
+            settings.stock_movement_data_file
+        )
+
+    raise ValueError(
+        f"Unknown stock_movement_storage_backend: "
+        f"{settings.stock_movement_storage_backend!r}"
+    )
+
+@lru_cache
+def get_stock_movement_repository() -> StockMovementRepository:
+    return build_stock_movement_repository(get_settings())
 
 def build_customer_repository(settings: Settings) -> CustomerRepository:
     if settings.customer_storage_backend == "json_file":

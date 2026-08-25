@@ -21,8 +21,14 @@ class ConfirmItemInput(BaseModel):
 
 class ConfirmRequest(BaseModel):
     extraction_job_id: Optional[uuid.UUID] = None
+
     customer_id: Optional[uuid.UUID] = None
+
     items: list[ConfirmItemInput] = Field(min_length=1)
+
+    discount: float = Field(default=0, ge=0)
+
+    tax_rate: float = Field(default=0, ge=0)
 
 
 class TransactionItemRead(BaseModel):
@@ -40,9 +46,16 @@ class TransactionItemRead(BaseModel):
 class TransactionRead(BaseModel):
     id: uuid.UUID
     customer_id: Optional[uuid.UUID]
+
     status: str
+
+    subtotal: float
+    discount: float
+    tax: float
     total_amount: float
+
     created_at: datetime
-    items: list[TransactionItemRead] = []
+
+    items: list[TransactionItemRead] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}

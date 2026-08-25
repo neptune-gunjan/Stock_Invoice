@@ -38,9 +38,11 @@ class StockService:
     def create_stock(self, data: StockCreate) -> StockItem:
         item = StockItem(
             name=data.name,
+            sku=data.sku,
             unit=data.unit,
             unit_price=data.unit_price,
             quantity_available=data.quantity_available,
+            low_stock_threshold=data.low_stock_threshold,
             aliases=_clean_aliases(data.aliases),
         )
         return self._repository.add(item)

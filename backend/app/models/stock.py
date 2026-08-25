@@ -14,19 +14,19 @@ def utcnow() -> datetime:
 
 
 class StockItem(BaseModel):
-    """
-    A single catalog item a shop sells.
-
-    This is the shape every StockRepository implementation stores and
-    returns -- see docs/phase1-stock-catalog.md for the field spec.
-    """
-
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
+
     name: str
+    sku: Optional[str] = None
+
     aliases: list[str] = Field(default_factory=list)
+
     unit: str
     unit_price: float
     quantity_available: float
+
+    low_stock_threshold: float = 0
+
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
     deleted_at: Optional[datetime] = None
@@ -34,3 +34,7 @@ class StockItem(BaseModel):
     @property
     def is_active(self) -> bool:
         return self.deleted_at is None
+
+    @property
+    def is_low_stock(self) -> bool:
+        return self.quantity_available <= self.low_stock_threshold

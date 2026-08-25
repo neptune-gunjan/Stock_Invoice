@@ -10,6 +10,7 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 from app.models.stock import utcnow
+from typing import Literal
 
 
 class TransactionItem(BaseModel):
@@ -25,10 +26,18 @@ class TransactionItem(BaseModel):
     line_total: float
 
 
+TransactionStatus = Literal[
+    "confirmed",
+    "cancelled"
+]
+
 class Transaction(BaseModel):
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
     customer_id: Optional[uuid.UUID] = None
-    status: str = "confirmed"
+    status: TransactionStatus = "confirmed"
+    subtotal: float
+    discount: float = 0
+    tax: float = 0
     total_amount: float
     created_at: datetime = Field(default_factory=utcnow)
     deleted_at: Optional[datetime] = None

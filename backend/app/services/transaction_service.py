@@ -17,14 +17,18 @@ eventual backend.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
 from app.models.transaction import Transaction, TransactionItem
 from app.repositories.transaction import TransactionRepository
+from app.repositories.stock_movement import StockMovementRepository
 from app.schemas.stock import StockUpdate
 from app.schemas.transaction import ConfirmRequest
 from app.services.customer_service import CustomerService
 from app.services.stock_service import StockNotFoundError, StockService
-
+from app.models.stock_movement import StockMovement
+from app.models.invoice import Invoice
+from app.repositories.invoice import InvoiceRepository
 
 class InsufficientStockError(Exception):
     def __init__(self, stock_id: uuid.UUID, requested: float, available: float) -> None:
@@ -40,10 +44,14 @@ class TransactionService:
         repository: TransactionRepository,
         stock_service: StockService,
         customer_service: CustomerService,
+        stock_movement_repository: StockMovementRepository,
+        invoice_repository: InvoiceRepository,
     ) -> None:
         self._repository = repository
         self._stock_service = stock_service
         self._customer_service = customer_service
+        self._stock_movement_repository = stock_movement_repository
+        self._invoice_repository = invoice_repository
 
     def confirm(self, request: ConfirmRequest) -> tuple[Transaction, list[TransactionItem]]:
         # Validate the customer (if any) up front, alongside every line,
@@ -60,10 +68,30 @@ class TransactionService:
                 raise InsufficientStockError(line.stock_id, line.qty, stock_item.quantity_available)
             resolved.append((stock_item, line.qty))
 
+        subtotal = sum(
+            stock_item.unit_price * qty
+            for stock_item, qty in resolved
+        )
+
+        discount = request.discount
+
+        if discount > subtotal:
+            raise ValueError("discount cannot be greater than subtotal")
+
+        taxable_amount = subtotal - discount
+
+        tax_amount = taxable_amount * request.tax_rate / 100
+
+        total_amount = taxable_amount + tax_amount
+
         transaction = Transaction(
             customer_id=request.customer_id,
-            total_amount=sum(stock_item.unit_price * qty for stock_item, qty in resolved),
+            subtotal=subtotal,
+            discount=discount,
+            tax=tax_amount,
+            total_amount=total_amount,
         )
+
         items = [
             TransactionItem(
                 transaction_id=transaction.id,
@@ -78,9 +106,39 @@ class TransactionService:
         ]
         self._repository.add(transaction, items)
 
+        invoice = Invoice(
+            invoice_number=self._generate_invoice_number(),
+            transaction_id=transaction.id,
+            customer_id=transaction.customer_id,
+            subtotal=transaction.subtotal,
+            discount=transaction.discount,
+            tax_rate=request.tax_rate,
+            tax_amount=transaction.tax,
+            total_amount=transaction.total_amount,
+        )
+
+        self._invoice_repository.add(invoice)
+
         for stock_item, qty in resolved:
+            quantity_before = stock_item.quantity_available
+            quantity_after = quantity_before - qty
+
             self._stock_service.update_stock(
-                stock_item.id, StockUpdate(quantity_available=stock_item.quantity_available - qty)
+                stock_item.id,
+                StockUpdate(
+                    quantity_available=quantity_after
+                ),
+            )
+
+            self._stock_movement_repository.add(
+                StockMovement(
+                    stock_id=stock_item.id,
+                    movement_type="sale",
+                    quantity=qty,
+                    quantity_before=quantity_before,
+                    quantity_after=quantity_after,
+                    reference_id=transaction.id,
+                )
             )
 
         return transaction, items
@@ -93,3 +151,24 @@ class TransactionService:
 
     def list_by_customer(self, customer_id: uuid.UUID) -> list[Transaction]:
         return self._repository.list_by_customer(customer_id)
+
+    def _generate_invoice_number(self) -> str:
+        invoices = self._invoice_repository.list_all()
+
+        year = datetime.now().year
+        prefix = f"INV-{year}-"
+
+        numbers = []
+
+        for invoice in invoices:
+            if invoice.invoice_number.startswith(prefix):
+                try:
+                    numbers.append(
+                        int(invoice.invoice_number[len(prefix):])
+                    )
+                except ValueError:
+                    continue
+
+        next_number = max(numbers, default=0) + 1
+
+        return f"{prefix}{next_number:06d}"

@@ -16,6 +16,7 @@ and TransactionService/CustomerService, not on xhtml2pdf directly.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -24,6 +25,8 @@ from app.config import Settings
 from app.services.customer_service import CustomerService
 from app.services.invoice_renderers.base import InvoiceRenderer
 from app.services.transaction_service import TransactionService
+from app.repositories.invoice import InvoiceRepository
+from app.models.invoice import Invoice
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
 
@@ -39,11 +42,13 @@ class InvoiceService:
         self,
         transaction_service: TransactionService,
         customer_service: CustomerService,
+        repository: InvoiceRepository,
         renderer: InvoiceRenderer,
         settings: Settings,
     ) -> None:
         self._transaction_service = transaction_service
         self._customer_service = customer_service
+        self._repository = repository
         self._renderer = renderer
         self._settings = settings
         self._jinja_env = Environment(
@@ -61,11 +66,31 @@ class InvoiceService:
         if transaction.customer_id is not None:
             customer = self._customer_service.get_active(transaction.customer_id)
 
+        invoice = self._repository.get_by_transaction(transaction.id)
+
+        if invoice is None:
+            invoice = Invoice(
+                invoice_number=self._generate_invoice_number(),
+                transaction_id=transaction.id,
+                customer_id=transaction.customer_id,
+                subtotal=transaction.subtotal,
+                discount=transaction.discount,
+                tax_rate=(
+                    transaction.tax / (transaction.subtotal - transaction.discount) * 100
+                    if transaction.subtotal > transaction.discount
+                    else 0
+                ),
+                tax_amount=transaction.tax,
+                total_amount=transaction.total_amount,
+            )
+
+            self._repository.add(invoice)
+
         template = self._jinja_env.get_template("invoice.html")
         html = template.render(
             shop_name=self._settings.shop_name,
             shop_address=self._settings.shop_address,
-            invoice_number=str(transaction.id)[:8].upper(),
+            invoice_number=invoice.invoice_number,
             invoice_date=transaction.created_at.strftime("%Y-%m-%d"),
             customer_name=customer.name if customer else None,
             customer_phone=customer.phone if customer else None,
@@ -73,3 +98,23 @@ class InvoiceService:
             total_amount=transaction.total_amount,
         )
         return self._renderer.render_pdf(html)
+
+    def _generate_invoice_number(self) -> str:
+        invoices = self._repository.list_all()
+
+        current_year = datetime.now().year
+        prefix = f"{self._settings.invoice_number_prefix}-{current_year}-"
+
+        numbers = []
+
+        for invoice in invoices:
+            if invoice.invoice_number.startswith(prefix):
+                try:
+                    number = int(invoice.invoice_number[len(prefix):])
+                    numbers.append(number)
+                except ValueError:
+                    continue
+
+        next_number = max(numbers, default=0) + 1
+
+        return f"{prefix}{next_number:06d}"
