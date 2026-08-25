@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+uploads/*
+!uploads/.gitkeep
+data/*.json
+!data/seed_stock.csv
+data/*.tmp
+.pytest_cache/

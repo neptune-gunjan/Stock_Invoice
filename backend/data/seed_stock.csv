@@ -1,0 +1,23 @@
+name,unit,unit_price,quantity_available,aliases
+Atta,kg,45,120,aata|flour|atta
+Sugar,kg,42,80,shakkar|cheeni
+Cooking Oil,litre,150,40,tel|oil|refined oil
+Rice,kg,60,200,chawal
+Toor Dal,kg,110,60,arhar dal|tuwar dal
+Moong Dal,kg,105,50,moong
+Chana Dal,kg,90,50,chana
+Salt,kg,20,100,namak
+Turmeric Powder,kg,180,25,haldi
+Red Chilli Powder,kg,220,25,mirchi|lal mirch
+Tea Leaves,kg,320,30,chai patti|chai
+Milk,litre,55,60,doodh
+Ghee,kg,540,20,desi ghee
+Bread,piece,45,40,pav|double roti
+Eggs,dozen,75,35,anda
+Potato,kg,25,150,aloo
+Onion,kg,30,150,pyaz
+Tomato,kg,35,100,tamatar
+Soap,piece,35,80,sabun
+Detergent Powder,kg,120,45,surf|washing powder
+Biscuit,packet,30,50,biscuit|biscuits|biskit
+Chocolate,piece,20,50,chocolate|choco|chocolate bar

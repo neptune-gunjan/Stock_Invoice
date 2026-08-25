@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv --version)",
+      "Bash(uv run *)",
+      "Bash(curl -s http://127.0.0.1:8123/health)",
+      "Bash(curl -s http://127.0.0.1:8123/stock)",
+      "Bash(rm -f data/stock.json)",
+      "Bash(rm -rf uploads/*.csv uploads/*.png)"
+    ]
+  }
+}
