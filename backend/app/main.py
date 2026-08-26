@@ -14,6 +14,8 @@ from app.routers.extract import router as extract_router
 from app.routers.invoice import router as invoice_router
 from app.routers.match import router as match_router
 from app.routers.stock import router as stock_router
+from app.routers.payment import router as payment_router
+from app.routers.business import router as business_router
 
 app = FastAPI(title="Stock & Invoice Assistant")
 
@@ -31,6 +33,8 @@ app.include_router(match_router)
 app.include_router(confirm_router)
 app.include_router(invoice_router)
 app.include_router(customers_router)
+app.include_router(payment_router)
+app.include_router(business_router)
 
 os.makedirs("uploads", exist_ok=True)
 

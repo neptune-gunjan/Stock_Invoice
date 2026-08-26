@@ -16,6 +16,8 @@ from app.repositories.factory import (
     get_transaction_repository,
     get_stock_movement_repository,
     get_invoice_repository,
+    get_payment_repository,
+    get_business_repository,
 )
 from app.repositories.stock import StockRepository
 from app.repositories.transaction import TransactionRepository
@@ -31,7 +33,10 @@ from app.services.invoice_service import InvoiceService
 from app.services.matching_service import MatchingService
 from app.services.stock_service import StockService
 from app.services.transaction_service import TransactionService
-
+from app.repositories.payment import PaymentRepository
+from app.services.payment_service import PaymentService
+from app.repositories.business import BusinessRepository
+from app.services.business_service import BusinessService
 
 
 def get_stock_service(
@@ -44,6 +49,11 @@ def get_customer_service(
     repository: CustomerRepository = Depends(get_customer_repository),
 ) -> CustomerService:
     return CustomerService(repository)
+
+def get_business_service(
+    repository: BusinessRepository = Depends(get_business_repository),
+) -> BusinessService:
+    return BusinessService(repository)
 
 
 def get_extraction_service(
@@ -83,8 +93,24 @@ def get_transaction_service(
 def get_invoice_service(
     transaction_service: TransactionService = Depends(get_transaction_service),
     customer_service: CustomerService = Depends(get_customer_service),
+    business_repository: BusinessRepository = Depends(get_business_repository),
     repository: InvoiceRepository = Depends(get_invoice_repository),
+    payment_repository: PaymentRepository = Depends(get_payment_repository),
     renderer: InvoiceRenderer = Depends(get_invoice_renderer),
-    settings: Settings = Depends(get_settings),  
+    settings: Settings = Depends(get_settings),
+    
 ) -> InvoiceService:
-    return InvoiceService(transaction_service, customer_service, repository, renderer, settings)
+    return InvoiceService(transaction_service, customer_service, business_repository, repository, payment_repository, renderer, settings,)
+
+def get_payment_service(
+    payment_repository: PaymentRepository = Depends(
+        get_payment_repository
+    ),
+    invoice_repository: InvoiceRepository = Depends(
+        get_invoice_repository
+    ),
+) -> PaymentService:
+    return PaymentService(
+        payment_repository,
+        invoice_repository,
+    )

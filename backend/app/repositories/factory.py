@@ -26,6 +26,10 @@ from app.repositories.stock_movement import StockMovementRepository
 from app.repositories.json_stock_movement import JsonFileStockMovementRepository
 from app.repositories.invoice import InvoiceRepository
 from app.repositories.json_invoice import JsonFileInvoiceRepository
+from app.repositories.payment import PaymentRepository
+from app.repositories.json_payment import JsonFilePaymentRepository
+from app.repositories.business import BusinessRepository
+from app.repositories.json_business import JsonFileBusinessRepository
 
 
 def build_stock_repository(settings: Settings) -> StockRepository:
@@ -105,3 +109,37 @@ def build_customer_repository(settings: Settings) -> CustomerRepository:
 @lru_cache
 def get_customer_repository() -> CustomerRepository:
     return build_customer_repository(get_settings())
+
+def build_payment_repository(
+    settings: Settings,
+) -> PaymentRepository:
+    if settings.payment_storage_backend == "json_file":
+        return JsonFilePaymentRepository(
+            settings.payment_data_file
+        )
+
+    raise ValueError(
+        f"Unknown payment_storage_backend: "
+        f"{settings.payment_storage_backend!r}"
+    )
+
+
+@lru_cache
+def get_payment_repository() -> PaymentRepository:
+    return build_payment_repository(get_settings())
+
+def build_business_repository(settings: Settings) -> BusinessRepository:
+    if settings.business_storage_backend == "json_file":
+        return JsonFileBusinessRepository(
+            settings.business_data_file
+        )
+
+    raise ValueError(
+        f"Unknown business_storage_backend: "
+        f"{settings.business_storage_backend!r}"
+    )
+
+
+@lru_cache
+def get_business_repository() -> BusinessRepository:
+    return build_business_repository(get_settings())

@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class InvoiceRead(BaseModel):
@@ -47,3 +47,6 @@ class InvoiceItemRead(BaseModel):
 
 class InvoiceDetailRead(InvoiceRead):
     items: list[InvoiceItemRead] = []
+
+    paid_amount: float = 0
+    remaining_amount: float = 0

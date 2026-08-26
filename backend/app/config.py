@@ -38,10 +38,16 @@ class Settings(BaseSettings):
 
     invoice_storage_backend: str = "json_file"
     invoice_data_file: Path = Path("data/invoices.json")
-    invoice_number_prefix: str = "INV"
+    # invoice_number_prefix: str = "INV"
+
+    payment_storage_backend: str = "json_file"
+    payment_data_file: Path = Path("data/payments.json")
 
     stock_movement_storage_backend: str = "json_file"
     stock_movement_data_file: Path = Path("data/stock_movements.json")
+
+    business_storage_backend: str = "json_file"
+    business_data_file: Path = Path("data/business.json")
 
 
     upload_dir: Path = Path("uploads")
@@ -60,9 +66,6 @@ class Settings(BaseSettings):
     # Which InvoiceRenderer implementation to use. See
     # app/services/invoice_renderers/factory.py.
     invoice_renderer: str = "xhtml2pdf"
-
-    shop_name: str = "My Shop"
-    shop_address: str = ""
 
 
 @lru_cache

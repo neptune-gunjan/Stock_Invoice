@@ -1,4 +1,4 @@
-"""Phase 5 -- Invoice PDF API. See docs/phase5-invoice.md."""
+"""Invoice API."""
 
 from __future__ import annotations
 
@@ -7,23 +7,106 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from app.dependencies import get_invoice_service
-from app.services.invoice_service import InvoiceService, TransactionNotFoundError
+from app.schemas.invoice import (
+    InvoiceRead,
+    InvoiceDetailRead,
+    InvoiceItemRead,
+)
+from app.services.invoice_service import (
+    InvoiceService,
+    TransactionNotFoundError,
+)
 
-router = APIRouter(prefix="/invoice", tags=["invoice"])
+router = APIRouter(
+    prefix="/invoices",
+    tags=["invoices"],
+)
 
 
-@router.get("/{transaction_id}")
+@router.get(
+    "",
+    response_model=list[InvoiceRead],
+)
+def list_invoices(
+    service: InvoiceService = Depends(get_invoice_service),
+) -> list[InvoiceRead]:
+    invoices = service.list_all()
+
+    return [
+        InvoiceRead.model_validate(invoice)
+        for invoice in invoices
+    ]
+
+
+@router.get(
+    "/{invoice_id}",
+    response_model=InvoiceDetailRead,
+)
+def get_invoice(
+    invoice_id: uuid.UUID,
+    service: InvoiceService = Depends(get_invoice_service),
+) -> InvoiceDetailRead:
+
+    result = service.get_detail(invoice_id)
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Invoice not found",
+        )
+
+    invoice, items, payments, paid_amount, remaining_amount = result
+
+    if invoice.deleted_at is not None:
+        raise HTTPException(
+            status_code=404,
+            detail="Invoice not found",
+        )
+
+    return InvoiceDetailRead(
+        **invoice.model_dump(),
+        items=[
+            InvoiceItemRead.model_validate(item)
+            for item in items
+        ],
+        payments=payments,
+        paid_amount=paid_amount,
+        remaining_amount=remaining_amount,
+    )
+
+
+@router.get(
+    "/{invoice_id}/pdf",
+)
 def get_invoice_pdf(
-    transaction_id: uuid.UUID,
+    invoice_id: uuid.UUID,
     service: InvoiceService = Depends(get_invoice_service),
 ) -> Response:
+
+    invoice = service.get(invoice_id)
+
+    if invoice is None or invoice.deleted_at is not None:
+        raise HTTPException(
+            status_code=404,
+            detail="Invoice not found",
+        )
+
     try:
-        pdf_bytes = service.render_invoice_pdf(transaction_id)
+        pdf_bytes = service.render_invoice_pdf(
+            invoice.transaction_id
+        )
     except TransactionNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=404,
+            detail=str(exc),
+        ) from exc
 
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="invoice-{transaction_id}.pdf"'},
+        headers={
+            "Content-Disposition": (
+                f'inline; filename="invoice-{invoice.invoice_number}.pdf"'
+            )
+        },
     )
