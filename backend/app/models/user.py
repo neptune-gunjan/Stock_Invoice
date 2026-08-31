@@ -1,4 +1,4 @@
-"""Business/shop domain entity."""
+"""Domain entity for authenticated application users."""
 
 from __future__ import annotations
 
@@ -11,24 +11,15 @@ from pydantic import BaseModel, Field
 from app.models.stock import utcnow
 
 
-class Business(BaseModel):
+class User(BaseModel):
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
 
-    # Owner of this business
-    owner_user_id: uuid.UUID
+    # Business/Shop owned by this user
+    business_id: Optional[uuid.UUID] = None
 
-    business_name: str
-    owner_name: Optional[str] = None
-
-    phone: Optional[str] = None
-    email: Optional[str] = None
-
-    address: Optional[str] = None
-    gst_number: Optional[str] = None
-
-    invoice_prefix: str = "INV"
-
-    logo_path: Optional[str] = None
+    name: str
+    email: str
+    password_hash: str
 
     is_active: bool = True
 

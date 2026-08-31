@@ -4,13 +4,18 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.dependencies import get_payment_service
+from app.dependencies import (
+    get_current_user,
+    get_payment_service,
+)
+from app.models.user import User
 from app.schemas.payment import PaymentCreate, PaymentRead
 from app.services.payment_service import (
     InvoiceNotFoundError,
     InvalidPaymentError,
     PaymentService,
 )
+
 
 router = APIRouter(
     prefix="/invoices",
@@ -27,12 +32,14 @@ def create_payment(
     invoice_id: uuid.UUID,
     payload: PaymentCreate,
     service: PaymentService = Depends(get_payment_service),
+    current_user: User = Depends(get_current_user),
 ) -> PaymentRead:
 
     try:
         payment = service.create_payment(
             invoice_id,
             payload,
+            current_user.business_id,
         )
 
     except InvoiceNotFoundError as exc:
@@ -57,10 +64,14 @@ def create_payment(
 def list_payments(
     invoice_id: uuid.UUID,
     service: PaymentService = Depends(get_payment_service),
+    current_user: User = Depends(get_current_user),
 ) -> list[PaymentRead]:
 
     try:
-        payments = service.list_by_invoice(invoice_id)
+        payments = service.list_by_invoice(
+            invoice_id,
+            current_user.business_id,
+        )
 
     except InvoiceNotFoundError as exc:
         raise HTTPException(
@@ -81,6 +92,7 @@ def list_payments(
 def get_payment(
     payment_id: uuid.UUID,
     service: PaymentService = Depends(get_payment_service),
+    current_user: User = Depends(get_current_user),
 ) -> PaymentRead:
 
     payment = service.get(payment_id)

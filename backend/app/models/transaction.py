@@ -33,11 +33,18 @@ TransactionStatus = Literal[
 
 class Transaction(BaseModel):
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
+
+    # Owner / tenant
+    business_id: uuid.UUID
+
     customer_id: Optional[uuid.UUID] = None
+
     status: TransactionStatus = "confirmed"
+
     subtotal: float
     discount: float = 0
     tax: float = 0
     total_amount: float
+
     created_at: datetime = Field(default_factory=utcnow)
     deleted_at: Optional[datetime] = None

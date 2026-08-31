@@ -1,4 +1,4 @@
-"""Domain entity for the stock catalog. Storage-agnostic on purpose."""
+"""Domain entity for the stock catalog."""
 
 from __future__ import annotations
 
@@ -15,6 +15,9 @@ def utcnow() -> datetime:
 
 class StockItem(BaseModel):
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
+
+    # Owner / tenant
+    business_id: uuid.UUID
 
     name: str
     sku: Optional[str] = None

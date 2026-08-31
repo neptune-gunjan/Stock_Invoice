@@ -53,15 +53,25 @@ class TransactionService:
         self._stock_movement_repository = stock_movement_repository
         self._invoice_repository = invoice_repository
 
-    def confirm(self, request: ConfirmRequest) -> tuple[Transaction, list[TransactionItem]]:
+    def confirm(
+        self,
+        request: ConfirmRequest,
+        business_id: uuid.UUID,
+    ) -> tuple[Transaction, list[TransactionItem]]:
         # Validate the customer (if any) up front, alongside every line,
         # before writing anything -- see the atomicity note above.
         if request.customer_id is not None:
-            self._customer_service.require_active(request.customer_id)
+            self._customer_service.require_active(
+                request.customer_id,
+                business_id=business_id,
+            )
 
         resolved = []
         for line in request.items:
-            stock_item = self._stock_service.get_active(line.stock_id)
+            stock_item = self._stock_service.get_active(
+                line.stock_id,
+                business_id=business_id,
+            )
             if stock_item is None:
                 raise StockNotFoundError(line.stock_id)
             if stock_item.quantity_available < line.qty:
@@ -85,6 +95,7 @@ class TransactionService:
         total_amount = taxable_amount + tax_amount
 
         transaction = Transaction(
+            business_id=business_id,
             customer_id=request.customer_id,
             subtotal=subtotal,
             discount=discount,
@@ -107,7 +118,8 @@ class TransactionService:
         self._repository.add(transaction, items)
 
         invoice = Invoice(
-            invoice_number=self._generate_invoice_number(),
+            business_id=business_id,
+            invoice_number=self._generate_invoice_number(business_id),
             transaction_id=transaction.id,
             customer_id=transaction.customer_id,
             subtotal=transaction.subtotal,
@@ -128,6 +140,7 @@ class TransactionService:
                 StockUpdate(
                     quantity_available=quantity_after
                 ),
+                business_id=business_id,
             )
 
             self._stock_movement_repository.add(
@@ -143,17 +156,31 @@ class TransactionService:
 
         return transaction, items
 
-    def get(self, transaction_id: uuid.UUID) -> tuple[Transaction, list[TransactionItem]] | None:
-        transaction = self._repository.get(transaction_id)
+    def get(self, transaction_id: uuid.UUID, business_id: uuid.UUID,) -> tuple[Transaction, list[TransactionItem]] | None:
+        transaction = self._repository.get(transaction_id, business_id,)
         if transaction is None:
             return None
-        return transaction, self._repository.list_items(transaction_id)
+        return transaction, self._repository.list_items(transaction_id, business_id,)
 
-    def list_by_customer(self, customer_id: uuid.UUID) -> list[Transaction]:
-        return self._repository.list_by_customer(customer_id)
+    def list_by_customer(
+        self,
+        customer_id: uuid.UUID,
+        business_id: uuid.UUID,
+    ) -> list[Transaction]:
 
-    def _generate_invoice_number(self) -> str:
-        invoices = self._invoice_repository.list_all()
+        return self._repository.list_by_customer(
+            customer_id,
+            business_id,
+        )
+
+    def _generate_invoice_number(
+        self,
+        business_id: uuid.UUID,
+    ) -> str:
+
+        invoices = self._invoice_repository.list_all(
+            business_id
+        )
 
         year = datetime.now().year
         prefix = f"INV-{year}-"
@@ -161,10 +188,15 @@ class TransactionService:
         numbers = []
 
         for invoice in invoices:
+
             if invoice.invoice_number.startswith(prefix):
                 try:
                     numbers.append(
-                        int(invoice.invoice_number[len(prefix):])
+                        int(
+                            invoice.invoice_number[
+                                len(prefix):
+                            ]
+                        )
                     )
                 except ValueError:
                     continue

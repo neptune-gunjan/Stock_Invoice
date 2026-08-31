@@ -1,13 +1,5 @@
 """
 Persistence contract for the stock catalog.
-
-This interface is the seam that keeps the app open for extension / closed
-for modification (SOLID's OCP) and lets StockService depend on an
-abstraction rather than a concrete store (DIP). Today only
-JsonFileStockRepository implements it (see stock_json.py, per the project's
-current "keep it in a JSON file for now" decision); adding Postgres later
-means writing a new class that implements this same interface -- neither
-StockService nor the API routes change.
 """
 
 from __future__ import annotations
@@ -20,22 +12,43 @@ from app.models.stock import StockItem
 
 
 class StockRepository(ABC):
-    @abstractmethod
-    def list_active(self) -> list[StockItem]:
-        """Return all non-soft-deleted stock items."""
 
     @abstractmethod
-    def get(self, item_id: uuid.UUID) -> Optional[StockItem]:
-        """Return a stock item by id, including soft-deleted ones, or None."""
+    def list_active(
+        self,
+        business_id: uuid.UUID,
+    ) -> list[StockItem]:
+        """Return active stock items belonging to a business."""
+        ...
 
     @abstractmethod
-    def add(self, item: StockItem) -> StockItem:
-        """Persist a brand-new stock item."""
+    def get(
+        self,
+        item_id: uuid.UUID,
+    ) -> Optional[StockItem]:
+        """Return a stock item by id, including soft-deleted ones."""
+        ...
 
     @abstractmethod
-    def update(self, item: StockItem) -> StockItem:
-        """Persist changes to an existing stock item (full replace by id)."""
+    def add(
+        self,
+        item: StockItem,
+    ) -> StockItem:
+        """Persist a new stock item."""
+        ...
 
     @abstractmethod
-    def soft_delete(self, item_id: uuid.UUID) -> bool:
-        """Mark an active item as deleted. Returns False if not found/already deleted."""
+    def update(
+        self,
+        item: StockItem,
+    ) -> StockItem:
+        """Persist changes to an existing stock item."""
+        ...
+
+    @abstractmethod
+    def soft_delete(
+        self,
+        item_id: uuid.UUID,
+    ) -> bool:
+        """Soft-delete an active stock item."""
+        ...

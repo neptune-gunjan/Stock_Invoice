@@ -46,6 +46,13 @@ class Settings(BaseSettings):
     stock_movement_storage_backend: str = "json_file"
     stock_movement_data_file: Path = Path("data/stock_movements.json")
 
+    user_storage_backend: str = "json_file"
+    user_data_file: Path = Path("data/users.json")
+
+    jwt_secret_key: str = "CHANGE_THIS_IN_ENV"
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60
+
     business_storage_backend: str = "json_file"
     business_data_file: Path = Path("data/business.json")
 
@@ -66,6 +73,11 @@ class Settings(BaseSettings):
     # Which InvoiceRenderer implementation to use. See
     # app/services/invoice_renderers/factory.py.
     invoice_renderer: str = "xhtml2pdf"
+
+    # Authentication
+    jwt_secret_key: str = "change-this-secret-key-in-production"
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60
 
 
 @lru_cache

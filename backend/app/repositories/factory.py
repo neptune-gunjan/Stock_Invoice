@@ -30,6 +30,8 @@ from app.repositories.payment import PaymentRepository
 from app.repositories.json_payment import JsonFilePaymentRepository
 from app.repositories.business import BusinessRepository
 from app.repositories.json_business import JsonFileBusinessRepository
+from app.repositories.user import UserRepository
+from app.repositories.user_json import JsonFileUserRepository
 
 
 def build_stock_repository(settings: Settings) -> StockRepository:
@@ -143,3 +145,19 @@ def build_business_repository(settings: Settings) -> BusinessRepository:
 @lru_cache
 def get_business_repository() -> BusinessRepository:
     return build_business_repository(get_settings())
+
+def build_user_repository(settings: Settings) -> UserRepository:
+    if settings.user_storage_backend == "json_file":
+        return JsonFileUserRepository(
+            settings.user_data_file
+        )
+
+    raise ValueError(
+        f"Unknown user_storage_backend: "
+        f"{settings.user_storage_backend!r}"
+    )
+
+
+@lru_cache
+def get_user_repository() -> UserRepository:
+    return build_user_repository(get_settings())

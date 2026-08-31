@@ -25,6 +25,9 @@ PaymentStatus = Literal[
 class Invoice(BaseModel):
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
 
+    # Owner / tenant
+    business_id: uuid.UUID
+
     invoice_number: str
 
     transaction_id: uuid.UUID

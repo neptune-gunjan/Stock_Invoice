@@ -10,6 +10,7 @@ from app.repositories.json_store import JsonCollection
 
 
 class JsonFileInvoiceRepository(InvoiceRepository):
+
     def __init__(self, file_path: Path) -> None:
         self._store: JsonCollection[Invoice] = JsonCollection(
             file_path,
@@ -24,9 +25,18 @@ class JsonFileInvoiceRepository(InvoiceRepository):
 
         return invoice
 
-    def get(self, invoice_id: uuid.UUID) -> Optional[Invoice]:
+    def get(
+        self,
+        invoice_id: uuid.UUID,
+        business_id: uuid.UUID,
+    ) -> Optional[Invoice]:
+
         for invoice in self._store.read_all():
-            if invoice.id == invoice_id:
+            if (
+                invoice.id == invoice_id
+                and invoice.business_id == business_id
+                and invoice.deleted_at is None
+            ):
                 return invoice
 
         return None
@@ -34,9 +44,15 @@ class JsonFileInvoiceRepository(InvoiceRepository):
     def get_by_number(
         self,
         invoice_number: str,
+        business_id: uuid.UUID,
     ) -> Optional[Invoice]:
+
         for invoice in self._store.read_all():
-            if invoice.invoice_number == invoice_number:
+            if (
+                invoice.invoice_number == invoice_number
+                and invoice.business_id == business_id
+                and invoice.deleted_at is None
+            ):
                 return invoice
 
         return None
@@ -44,26 +60,47 @@ class JsonFileInvoiceRepository(InvoiceRepository):
     def get_by_transaction(
         self,
         transaction_id: uuid.UUID,
+        business_id: uuid.UUID,
     ) -> Optional[Invoice]:
+
         for invoice in self._store.read_all():
-            if invoice.transaction_id == transaction_id:
+            if (
+                invoice.transaction_id == transaction_id
+                and invoice.business_id == business_id
+                and invoice.deleted_at is None
+            ):
                 return invoice
 
         return None
 
-    def list_all(self) -> list[Invoice]:
+    def list_all(
+        self,
+        business_id: uuid.UUID,
+    ) -> list[Invoice]:
+
         return [
             invoice
             for invoice in self._store.read_all()
-            if invoice.deleted_at is None
+            if (
+                invoice.business_id == business_id
+                and invoice.deleted_at is None
+            )
         ]
 
-    def update(self, invoice: Invoice) -> Invoice:
+    def update(
+        self,
+        invoice: Invoice,
+        business_id: uuid.UUID,
+    ) -> Invoice:
+
         with self._store.lock:
             invoices = self._store.read_all()
 
             for index, existing in enumerate(invoices):
-                if existing.id == invoice.id:
+                if (
+                    existing.id == invoice.id
+                    and existing.business_id == business_id
+                ):
                     invoices[index] = invoice
                     self._store.write_all(invoices)
                     return invoice

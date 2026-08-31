@@ -8,18 +8,24 @@ from app.models.invoice import Invoice
 
 
 class InvoiceRepository(ABC):
+
     @abstractmethod
     def add(self, invoice: Invoice) -> Invoice:
         ...
 
     @abstractmethod
-    def get(self, invoice_id: uuid.UUID) -> Optional[Invoice]:
+    def get(
+        self,
+        invoice_id: uuid.UUID,
+        business_id: uuid.UUID,
+    ) -> Optional[Invoice]:
         ...
 
     @abstractmethod
     def get_by_number(
         self,
         invoice_number: str,
+        business_id: uuid.UUID,
     ) -> Optional[Invoice]:
         ...
 
@@ -27,13 +33,21 @@ class InvoiceRepository(ABC):
     def get_by_transaction(
         self,
         transaction_id: uuid.UUID,
+        business_id: uuid.UUID,
     ) -> Optional[Invoice]:
         ...
 
     @abstractmethod
-    def list_all(self) -> list[Invoice]:
+    def list_all(
+        self,
+        business_id: uuid.UUID,
+    ) -> list[Invoice]:
         ...
 
     @abstractmethod
-    def update(self, invoice: Invoice) -> Invoice:
+    def update(
+        self,
+        invoice: Invoice,
+        business_id: uuid.UUID,
+    ) -> Invoice:
         ...

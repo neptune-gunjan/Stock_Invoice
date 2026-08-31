@@ -71,11 +71,12 @@ class InvoiceService:
     def render_invoice_pdf(
         self,
         transaction_id: uuid.UUID,
+        business_id: uuid.UUID,
     ) -> bytes:
         # ---------------------------------------------------------
         # 1. Get transaction
         # ---------------------------------------------------------
-        result = self._transaction_service.get(transaction_id)
+        result = self._transaction_service.get(transaction_id, business_id)
 
         if result is None:
             raise TransactionNotFoundError(transaction_id)
@@ -89,13 +90,14 @@ class InvoiceService:
 
         if transaction.customer_id is not None:
             customer = self._customer_service.get_active(
-                transaction.customer_id
+                transaction.customer_id,
+                business_id,
             )
 
         # ---------------------------------------------------------
         # 3. Get active business
         # ---------------------------------------------------------
-        business = self._business_repository.get_active()
+        business = self._business_repository.get(business_id)
 
         if business is None:
             raise BusinessNotFoundError()
@@ -104,7 +106,8 @@ class InvoiceService:
         # 4. Get existing invoice
         # ---------------------------------------------------------
         invoice = self._repository.get_by_transaction(
-            transaction.id
+            transaction.id,
+            business_id,
         )
 
         # ---------------------------------------------------------
@@ -112,7 +115,7 @@ class InvoiceService:
         # ---------------------------------------------------------
         if invoice is None:
             invoice = Invoice(
-                invoice_number=self._generate_invoice_number(),
+                invoice_number=self._generate_invoice_number(business_id),
                 transaction_id=transaction.id,
                 customer_id=transaction.customer_id,
                 subtotal=transaction.subtotal,
@@ -209,20 +212,26 @@ class InvoiceService:
     def get(
         self,
         invoice_id: uuid.UUID,
+        business_id: uuid.UUID
     ) -> Invoice | None:
-        return self._repository.get(invoice_id)
+        return self._repository.get(invoice_id, business_id)
 
     def get_detail(
         self,
         invoice_id: uuid.UUID,
+        business_id: uuid.UUID,
     ):
-        invoice = self._repository.get(invoice_id)
+        invoice = self._repository.get(
+            invoice_id,
+            business_id,
+        )
 
         if invoice is None:
             return None
 
         transaction_result = self._transaction_service.get(
-            invoice.transaction_id
+            invoice.transaction_id,
+            business_id,
         )
 
         if transaction_result is None:
@@ -252,33 +261,48 @@ class InvoiceService:
             remaining_amount,
         )
 
-    def list_all(self) -> list[Invoice]:
-        return self._repository.list_all()
+    def list_all(self, business_id: uuid.UUID,) -> list[Invoice]:
+        return self._repository.list_all(
+        business_id
+    )
 
-    def _generate_invoice_number(self,) -> str:
-        invoices = self._repository.list_all()
+    def _generate_invoice_number(
+        self,
+        business_id: uuid.UUID,
+    ) -> str:
 
-        business = self._business_repository.get_active()
+        invoices = self._repository.list_all(
+            business_id
+        )
+
+        business = self._business_repository.get(
+            business_id
+        )
 
         if business is None:
-            raise ValueError("No active business profile configured")
+            raise ValueError(
+                "Business profile not found"
+            )
 
         current_year = datetime.now().year
 
-        prefix = f"{business.invoice_prefix}-{current_year}-"
+        prefix = (
+            f"{business.invoice_prefix}"
+            f"-{current_year}-"
+        )
 
         numbers = []
 
         for invoice in invoices:
             if invoice.invoice_number.startswith(prefix):
                 try:
-                    number = int(
-                        invoice.invoice_number[
-                            len(prefix):
-                        ]
+                    numbers.append(
+                        int(
+                            invoice.invoice_number[
+                                len(prefix):
+                            ]
+                        )
                     )
-                    numbers.append(number)
-
                 except ValueError:
                     continue
 

@@ -1,4 +1,4 @@
-"""Domain entity for customers (Phase 6). See docs/phase6-history.md."""
+"""Domain entity for customers."""
 
 from __future__ import annotations
 
@@ -13,8 +13,13 @@ from app.models.stock import utcnow
 
 class Customer(BaseModel):
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
+
+    # Owner / tenant
+    business_id: uuid.UUID
+
     name: str
     phone: Optional[str] = None
+
     created_at: datetime = Field(default_factory=utcnow)
     deleted_at: Optional[datetime] = None
 

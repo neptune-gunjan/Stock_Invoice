@@ -34,9 +34,10 @@ class PaymentService:
         self,
         invoice_id: uuid.UUID,
         request: PaymentCreate,
+        business_id: uuid.UUID,
     ) -> Payment:
 
-        invoice = self._invoice_repository.get(invoice_id)
+        invoice = self._invoice_repository.get(invoice_id, business_id)
 
         if invoice is None or invoice.deleted_at is not None:
             raise InvoiceNotFoundError(invoice_id)
@@ -96,7 +97,7 @@ class PaymentService:
         else:
             invoice.payment_method = "multiple"
 
-        self._invoice_repository.update(invoice)
+        self._invoice_repository.update(invoice, business_id)
 
         return payment
 
@@ -109,9 +110,10 @@ class PaymentService:
     def list_by_invoice(
         self,
         invoice_id: uuid.UUID,
+        business_id: uuid.UUID,
     ) -> list[Payment]:
 
-        invoice = self._invoice_repository.get(invoice_id)
+        invoice = self._invoice_repository.get(invoice_id, business_id)
 
         if invoice is None or invoice.deleted_at is not None:
             raise InvoiceNotFoundError(invoice_id)

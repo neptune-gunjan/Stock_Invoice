@@ -6,7 +6,11 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 
-from app.dependencies import get_invoice_service
+from app.dependencies import (
+    get_current_user,
+    get_invoice_service,
+)
+from app.models.user import User
 from app.schemas.invoice import (
     InvoiceRead,
     InvoiceDetailRead,
@@ -16,6 +20,7 @@ from app.services.invoice_service import (
     InvoiceService,
     TransactionNotFoundError,
 )
+
 
 router = APIRouter(
     prefix="/invoices",
@@ -29,8 +34,10 @@ router = APIRouter(
 )
 def list_invoices(
     service: InvoiceService = Depends(get_invoice_service),
+    current_user: User = Depends(get_current_user),
 ) -> list[InvoiceRead]:
-    invoices = service.list_all()
+
+    invoices = service.list_all(current_user.business_id)
 
     return [
         InvoiceRead.model_validate(invoice)
@@ -45,9 +52,13 @@ def list_invoices(
 def get_invoice(
     invoice_id: uuid.UUID,
     service: InvoiceService = Depends(get_invoice_service),
+    current_user: User = Depends(get_current_user),
 ) -> InvoiceDetailRead:
 
-    result = service.get_detail(invoice_id)
+    result = service.get_detail(
+        invoice_id,
+        current_user.business_id,
+    )
 
     if result is None:
         raise HTTPException(
@@ -81,9 +92,13 @@ def get_invoice(
 def get_invoice_pdf(
     invoice_id: uuid.UUID,
     service: InvoiceService = Depends(get_invoice_service),
+    current_user: User = Depends(get_current_user),
 ) -> Response:
 
-    invoice = service.get(invoice_id)
+    invoice = service.get(
+        invoice_id,
+        current_user.business_id,
+    )
 
     if invoice is None or invoice.deleted_at is not None:
         raise HTTPException(
@@ -93,8 +108,10 @@ def get_invoice_pdf(
 
     try:
         pdf_bytes = service.render_invoice_pdf(
-            invoice.transaction_id
+            invoice.transaction_id,
+            current_user.business_id,
         )
+
     except TransactionNotFoundError as exc:
         raise HTTPException(
             status_code=404,
