@@ -56,6 +56,20 @@ class JsonFileTransactionRepository(TransactionRepository):
             return []
         return [item for item in self._items.read_all() if item.transaction_id == transaction_id]
 
+    def list_all(
+        self,
+        business_id: uuid.UUID,
+    ) -> list[Transaction]:
+
+        return [
+            transaction
+            for transaction in self._transactions.read_all()
+            if (
+                transaction.business_id == business_id
+                and transaction.deleted_at is None
+            )
+        ]
+
     def list_by_customer(
         self,
         customer_id: uuid.UUID,

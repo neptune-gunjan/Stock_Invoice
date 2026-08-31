@@ -44,6 +44,7 @@ from app.services.matching_service import MatchingService
 from app.services.payment_service import PaymentService
 from app.services.stock_service import StockService
 from app.services.transaction_service import TransactionService
+from app.services.dashboard_service import DashboardService
 
 
 # ============================================================
@@ -261,4 +262,30 @@ def get_payment_service(
     return PaymentService(
         payment_repository,
         invoice_repository,
+    )
+
+# ============================================================
+# Dashboard
+# ============================================================
+
+def get_dashboard_service(
+    invoice_repository: InvoiceRepository = Depends(
+        get_invoice_repository
+    ),
+    stock_repository: StockRepository = Depends(
+        get_stock_repository
+    ),
+    customer_repository: CustomerRepository = Depends(
+        get_customer_repository
+    ),
+    payment_repository: PaymentRepository = Depends(
+        get_payment_repository
+    ),
+) -> DashboardService:
+
+    return DashboardService(
+        invoice_repository,
+        stock_repository,
+        customer_repository,
+        payment_repository,
     )

@@ -34,6 +34,14 @@ class TransactionRepository(ABC):
         ...
 
     @abstractmethod
+    def list_all(
+        self,
+        business_id: uuid.UUID,
+    ) -> list[Transaction]:
+        """Return all active transactions belonging to a business."""
+        ...
+
+    @abstractmethod
     def list_by_customer(
         self,
         customer_id: uuid.UUID,
