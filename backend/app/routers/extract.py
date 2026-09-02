@@ -46,6 +46,13 @@ async def extract_image(
     current_user: User = Depends(get_current_user),
 ) -> ExtractionJobRead:
 
+    # User must belong to a business
+    if current_user.business_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User is not associated with a business.",
+        )
+
     # Validate uploaded file
     if (
         not file.content_type
@@ -90,9 +97,12 @@ async def extract_image(
 
     job, items = result
 
-    # Enrich extracted items with stock information
-    stock_items = stock_service.list_stock()
+    # Get stock for current business
+    stock_items = stock_service.list_stock(
+        business_id=current_user.business_id
+    )
 
+    # Enrich extracted items with stock information
     enriched_items = enrich_items(
         items,
         stock_items,
@@ -115,6 +125,12 @@ def get_extraction_job(
     current_user: User = Depends(get_current_user),
 ) -> ExtractionJobRead:
 
+    if current_user.business_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User is not associated with a business.",
+        )
+
     result = service.get_job(job_id)
 
     if result is None:
@@ -125,7 +141,10 @@ def get_extraction_job(
 
     job, items = result
 
-    stock_items = stock_service.list_stock()
+    # Get stock for current business
+    stock_items = stock_service.list_stock(
+        business_id=current_user.business_id
+    )
 
     enriched_items = enrich_items(
         items,
@@ -136,3 +155,4 @@ def get_extraction_job(
         **job.model_dump(),
         items=enriched_items,
     )
+

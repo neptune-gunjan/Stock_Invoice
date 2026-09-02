@@ -69,12 +69,27 @@ class MatchingService:
         self._stock_service = stock_service
         self._threshold = threshold
 
-    def match_job(self, job_id: uuid.UUID) -> list[ExtractedItem]:
-        items = self._extraction_repository.list_items(job_id)
-        catalog = self._stock_service.list_stock()
+    def match_job(
+        self,
+        job_id: uuid.UUID,
+        business_id: uuid.UUID,
+    ) -> list[ExtractedItem]:
 
-        matched_items = [self._match_item(item, catalog) for item in items]
-        return self._extraction_repository.replace_items(job_id, matched_items)
+        items = self._extraction_repository.list_items(job_id)
+
+        catalog = self._stock_service.list_stock(
+            business_id=business_id
+        )
+
+        matched_items = [
+            self._match_item(item, catalog)
+            for item in items
+        ]
+
+        return self._extraction_repository.replace_items(
+            job_id,
+            matched_items,
+        )
 
     def _match_item(self, item: ExtractedItem, catalog: list[StockItem]) -> ExtractedItem:
         best_item, best_score = _best_match(item.raw_text, catalog)

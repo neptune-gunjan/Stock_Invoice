@@ -47,7 +47,7 @@ def confirm_transaction(
                 detail="User is not associated with a business.",
             )
 
-        transaction, items = service.confirm(
+        transaction, items, invoice = service.confirm(
             payload,
             business_id=current_user.business_id,
         )
@@ -70,6 +70,8 @@ def confirm_transaction(
 
     return TransactionRead(
         **transaction.model_dump(),
+        invoice_id=invoice.id,
+        invoice_number=invoice.invoice_number,
         items=items,
     )
 

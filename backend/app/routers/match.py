@@ -53,11 +53,14 @@ def match_job(
 
     # Match extracted items with stock
     matched_items = matching_service.match_job(
-        job_id
-    )
+        job_id,
+        business_id=current_user.business_id,
+    )   
 
     # Enrich matched items with stock information
-    stock_items = stock_service.list_stock()
+    stock_items = stock_service.list_stock(
+        business_id=current_user.business_id
+    )
 
     return enrich_items(
         matched_items,

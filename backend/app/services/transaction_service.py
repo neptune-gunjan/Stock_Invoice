@@ -57,7 +57,7 @@ class TransactionService:
         self,
         request: ConfirmRequest,
         business_id: uuid.UUID,
-    ) -> tuple[Transaction, list[TransactionItem]]:
+    ) -> tuple[Transaction, list[TransactionItem], Invoice]:
         # Validate the customer (if any) up front, alongside every line,
         # before writing anything -- see the atomicity note above.
         if request.customer_id is not None:
@@ -154,7 +154,7 @@ class TransactionService:
                 )
             )
 
-        return transaction, items
+        return transaction, items, invoice
 
     def get(self, transaction_id: uuid.UUID, business_id: uuid.UUID,) -> tuple[Transaction, list[TransactionItem]] | None:
         transaction = self._repository.get(transaction_id, business_id,)

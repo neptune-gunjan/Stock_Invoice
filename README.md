@@ -24,8 +24,8 @@ touching business logic.
 cd backend
 uv sync
 cp .env.example .env   # then fill in GROQ_API_KEY
-uv run uvicorn app.main:app --reload --port 8000
-```
+
+```uv run uvicorn app.main:app --reload --port 8000
 
 Seed a starter catalog (optional):
 ```bash

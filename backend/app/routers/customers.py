@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.dependencies import (
     get_current_user,
     get_customer_service,
+    get_invoice_service,
     get_transaction_service,
 )
 from app.models.user import User
@@ -18,6 +19,7 @@ from app.services.customer_service import (
     CustomerNotFoundError,
     CustomerService,
 )
+from app.services.invoice_service import InvoiceService
 from app.services.transaction_service import TransactionService
 
 
@@ -36,8 +38,12 @@ router = APIRouter(
     response_model=list[CustomerRead],
 )
 def list_customers(
-    service: CustomerService = Depends(get_customer_service),
-    current_user: User = Depends(get_current_user),
+    service: CustomerService = Depends(
+        get_customer_service
+    ),
+    current_user: User = Depends(
+        get_current_user
+    ),
 ) -> list[CustomerRead]:
 
     if current_user.business_id is None:
@@ -58,8 +64,12 @@ def list_customers(
 )
 def create_customer(
     payload: CustomerCreate,
-    service: CustomerService = Depends(get_customer_service),
-    current_user: User = Depends(get_current_user),
+    service: CustomerService = Depends(
+        get_customer_service
+    ),
+    current_user: User = Depends(
+        get_current_user
+    ),
 ) -> CustomerRead:
 
     if current_user.business_id is None:
@@ -90,7 +100,12 @@ def list_customer_transactions(
     transaction_service: TransactionService = Depends(
         get_transaction_service
     ),
-    current_user: User = Depends(get_current_user),
+    invoice_service: InvoiceService = Depends(
+        get_invoice_service
+    ),
+    current_user: User = Depends(
+        get_current_user
+    ),
 ) -> list[TransactionRead]:
 
     if current_user.business_id is None:
@@ -116,12 +131,38 @@ def list_customer_transactions(
         business_id=current_user.business_id,
     )
 
-    return [
-        TransactionRead(
-            **transaction.model_dump(),
-            items=transaction_service.get(
-                transaction.id
-            )[1],
+    result: list[TransactionRead] = []
+
+    for transaction in transactions:
+
+        transaction_result = transaction_service.get(
+            transaction.id,
+            business_id=current_user.business_id,
         )
-        for transaction in transactions
-    ]
+
+        if transaction_result is None:
+            continue
+
+        transaction, items = transaction_result
+
+        invoice = invoice_service.get_by_transaction(
+            transaction.id,
+            business_id=current_user.business_id,
+        )
+
+        # Transaction without invoice should not be
+        # returned because invoice fields are mandatory
+        # in TransactionRead.
+        if invoice is None:
+            continue
+
+        result.append(
+            TransactionRead(
+                **transaction.model_dump(),
+                invoice_id=invoice.id,
+                invoice_number=invoice.invoice_number,
+                items=items,
+            )
+        )
+
+    return result

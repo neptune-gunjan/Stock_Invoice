@@ -209,6 +209,16 @@ class InvoiceService:
         # ---------------------------------------------------------
         return self._renderer.render_pdf(html)
 
+    def get_by_transaction(
+        self,
+        transaction_id: uuid.UUID,
+        business_id: uuid.UUID,
+    ) -> Invoice | None:
+        return self._repository.get_by_transaction(
+            transaction_id,
+            business_id,
+        )
+
     def get(
         self,
         invoice_id: uuid.UUID,

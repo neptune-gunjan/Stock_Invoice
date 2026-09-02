@@ -45,8 +45,10 @@ class TransactionItemRead(BaseModel):
 
 class TransactionRead(BaseModel):
     id: uuid.UUID
-    customer_id: Optional[uuid.UUID]
+    invoice_id: uuid.UUID
+    invoice_number: str
 
+    customer_id: Optional[uuid.UUID]
     status: str
 
     subtotal: float
