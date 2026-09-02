@@ -1,3 +1,4 @@
+
 """
 Phase 5 -- render a confirmed transaction as a PDF invoice.
 
@@ -7,6 +8,8 @@ InvoiceService depends on abstractions:
 - BusinessRepository
 - InvoiceRepository
 - PaymentRepository
+- StockMovementRepository
+- StockService
 - InvoiceRenderer
 
 Business information is loaded dynamically from BusinessRepository.
@@ -15,19 +18,23 @@ Business information is loaded dynamically from BusinessRepository.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app.config import Settings
 from app.models.invoice import Invoice
+from app.models.stock_movement import StockMovement
 from app.repositories.business import BusinessRepository
 from app.repositories.invoice import InvoiceRepository
 from app.repositories.payment import PaymentRepository
+from app.repositories.stock_movement import StockMovementRepository
 from app.services.customer_service import CustomerService
 from app.services.invoice_renderers.base import InvoiceRenderer
+from app.services.stock_service import StockNotFoundError, StockService
 from app.services.transaction_service import TransactionService
+from app.schemas.stock import StockUpdate
 
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
@@ -44,6 +51,16 @@ class BusinessNotFoundError(Exception):
         super().__init__("active business profile not found")
 
 
+class InvoiceNotFoundError(Exception):
+    def __init__(self, invoice_id: uuid.UUID) -> None:
+        self.invoice_id = invoice_id
+        super().__init__(f"invoice {invoice_id} not found")
+
+
+class InvalidInvoiceStateError(Exception):
+    pass
+
+
 class InvoiceService:
     def __init__(
         self,
@@ -52,6 +69,8 @@ class InvoiceService:
         business_repository: BusinessRepository,
         repository: InvoiceRepository,
         payment_repository: PaymentRepository,
+        stock_movement_repository: StockMovementRepository,
+        stock_service: StockService,
         renderer: InvoiceRenderer,
         settings: Settings,
     ) -> None:
@@ -60,6 +79,8 @@ class InvoiceService:
         self._business_repository = business_repository
         self._repository = repository
         self._payment_repository = payment_repository
+        self._stock_movement_repository = stock_movement_repository
+        self._stock_service = stock_service
         self._renderer = renderer
         self._settings = settings
 
@@ -76,7 +97,10 @@ class InvoiceService:
         # ---------------------------------------------------------
         # 1. Get transaction
         # ---------------------------------------------------------
-        result = self._transaction_service.get(transaction_id, business_id)
+        result = self._transaction_service.get(
+            transaction_id,
+            business_id,
+        )
 
         if result is None:
             raise TransactionNotFoundError(transaction_id)
@@ -115,7 +139,10 @@ class InvoiceService:
         # ---------------------------------------------------------
         if invoice is None:
             invoice = Invoice(
-                invoice_number=self._generate_invoice_number(business_id),
+                business_id=business_id,
+                invoice_number=self._generate_invoice_number(
+                    business_id
+                ),
                 transaction_id=transaction.id,
                 customer_id=transaction.customer_id,
                 subtotal=transaction.subtotal,
@@ -209,6 +236,10 @@ class InvoiceService:
         # ---------------------------------------------------------
         return self._renderer.render_pdf(html)
 
+    # ============================================================
+    # Invoice lookup
+    # ============================================================
+
     def get_by_transaction(
         self,
         transaction_id: uuid.UUID,
@@ -222,9 +253,16 @@ class InvoiceService:
     def get(
         self,
         invoice_id: uuid.UUID,
-        business_id: uuid.UUID
+        business_id: uuid.UUID,
     ) -> Invoice | None:
-        return self._repository.get(invoice_id, business_id)
+        return self._repository.get(
+            invoice_id,
+            business_id,
+        )
+
+    # ============================================================
+    # Invoice detail
+    # ============================================================
 
     def get_detail(
         self,
@@ -271,10 +309,149 @@ class InvoiceService:
             remaining_amount,
         )
 
-    def list_all(self, business_id: uuid.UUID,) -> list[Invoice]:
+    # ============================================================
+    # List invoices
+    # ============================================================
+
+    def list_all(
+        self,
+        business_id: uuid.UUID,
+    ) -> list[Invoice]:
         return self._repository.list_all(
-        business_id
-    )
+            business_id
+        )
+
+    # ============================================================
+    # Cancel invoice + restore stock
+    # ============================================================
+
+    def cancel_invoice(
+        self,
+        invoice_id: uuid.UUID,
+        business_id: uuid.UUID,
+    ) -> Invoice:
+
+        # ---------------------------------------------------------
+        # 1. Get invoice
+        # ---------------------------------------------------------
+
+        invoice = self._repository.get(
+            invoice_id,
+            business_id,
+        )
+
+        if invoice is None or invoice.deleted_at is not None:
+            raise InvoiceNotFoundError(invoice_id)
+
+        # ---------------------------------------------------------
+        # 2. Prevent duplicate cancellation
+        # ---------------------------------------------------------
+
+        if invoice.status == "cancelled":
+            raise InvalidInvoiceStateError(
+                "Invoice is already cancelled"
+            )
+
+        # ---------------------------------------------------------
+        # 3. Get transaction + items
+        # ---------------------------------------------------------
+
+        transaction_result = self._transaction_service.get(
+            invoice.transaction_id,
+            business_id,
+        )
+
+        if transaction_result is None:
+            raise TransactionNotFoundError(
+                invoice.transaction_id
+            )
+
+        transaction, items = transaction_result
+
+        # ---------------------------------------------------------
+        # STEP 1: PRE-VALIDATE ALL STOCK ITEMS
+        # ---------------------------------------------------------
+
+        stock_items = []
+
+        for item in items:
+            stock_item = self._stock_service.get_for_business(
+                item.stock_id,
+                business_id,
+            )
+
+            if stock_item is None:
+                raise StockNotFoundError(item.stock_id)
+
+            stock_items.append(
+                (item, stock_item)
+            )
+
+        # ---------------------------------------------------------
+        # STEP 2: PRE-BUILD / VALIDATE ALL REVERSAL MOVEMENTS
+        #
+        # IMPORTANT:
+        # No stock has been modified yet.
+        # If StockMovement validation fails, cancellation stops safely.
+        # ---------------------------------------------------------
+
+        reversal_movements = []
+
+        for item, stock_item in stock_items:
+
+            quantity_before = stock_item.quantity_available
+            quantity_after = (
+                quantity_before + item.qty
+            )
+
+            reversal_movements.append(
+                StockMovement(
+                    stock_id=item.stock_id,
+                    movement_type="sale_reversal",
+                    quantity=item.qty,
+                    quantity_before=quantity_before,
+                    quantity_after=quantity_after,
+                    reference_id=transaction.id,
+                )
+            )
+
+        # ---------------------------------------------------------
+        # STEP 3: RESTORE STOCK
+        # ---------------------------------------------------------
+        
+        for item, stock_item in stock_items:
+
+        
+            self._stock_service.restore_stock_for_cancellation(
+                item.stock_id,
+                item.qty,
+                business_id,
+            )
+
+            # -----------------------------------------------------
+            # Record stock reversal
+            # -----------------------------------------------------
+
+            for movement in reversal_movements:
+                self._stock_movement_repository.add(
+                    movement
+                )
+
+        # ---------------------------------------------------------
+        # STEP 3: CANCEL INVOICE
+        # ---------------------------------------------------------
+
+        invoice.status = "cancelled"
+        invoice.updated_at = datetime.now(timezone.utc)
+
+        return self._repository.update(
+            invoice,
+            business_id,
+        )
+    
+    # ============================================================
+    # Invoice number generation
+    # ============================================================
 
     def _generate_invoice_number(
         self,
@@ -325,3 +502,4 @@ class InvoiceService:
             f"{prefix}"
             f"{next_number:06d}"
         )
+

@@ -5,7 +5,10 @@ import {
   Navigate,
 } from "react-router-dom";
 
+import { isAuthenticated } from "./services/auth";
+
 import Dashboard from "./pages/Dashboard";
+import Register from "./pages/Register";
 import Login from "./pages/Login";
 import CreateInvoice from "./pages/CreateInvoice";
 import Customers from "./pages/Customers";
@@ -16,9 +19,7 @@ import Upload from "./pages/Upload";
 
 
 function ProtectedRoute({ children }) {
-  const token = localStorage.getItem("access_token");
-
-  if (!token) {
+  if (!isAuthenticated()) {
     return <Navigate to="/login" replace />;
   }
 
@@ -31,6 +32,11 @@ function App() {
     <BrowserRouter>
 
       <Routes>
+        {/* Register */}
+        <Route
+          path="/register"
+          element={<Register />}
+        />
 
         {/* Login */}
         <Route
@@ -119,11 +125,7 @@ function App() {
           path="/"
           element={
             <Navigate
-              to={
-                localStorage.getItem("access_token")
-                  ? "/dashboard"
-                  : "/login"
-              }
+              to={isAuthenticated() ? "/dashboard" : "/login"}
               replace
             />
           }

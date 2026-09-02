@@ -233,6 +233,12 @@ def get_invoice_service(
     payment_repository: PaymentRepository = Depends(
         get_payment_repository
     ),
+    stock_movement_repository: StockMovementRepository = Depends(
+        get_stock_movement_repository 
+    ), 
+    stock_service: StockService = Depends( 
+        get_stock_service 
+    ),
     renderer: InvoiceRenderer = Depends(
         get_invoice_renderer
     ),
@@ -247,6 +253,8 @@ def get_invoice_service(
         business_repository,
         repository,
         payment_repository,
+        stock_movement_repository,
+        stock_service,
         renderer,
         settings,
     )

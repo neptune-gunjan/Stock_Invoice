@@ -14,6 +14,7 @@ StockMovementType = Literal[
     "sale",
     "adjustment",
     "return",
+    "sale_reversal",
 ]
 
 

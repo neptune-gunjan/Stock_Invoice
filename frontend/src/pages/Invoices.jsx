@@ -28,6 +28,7 @@ function Invoices() {
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const [downloading, setDownloading] = useState(null);
+  const [cancelling, setCancelling] = useState(null);
 
   useEffect(() => {
     loadInvoices();
@@ -96,6 +97,61 @@ function Invoices() {
       setDownloading(null);
     }
   }
+
+  async function cancelInvoice(invoiceId) {
+    const invoice = invoices.find(
+        (item) => item.id === invoiceId
+    );
+
+    if (!invoice) {
+        return;
+    }
+
+    if (invoice.status === "cancelled") {
+        return;
+    }
+
+    const confirmed = window.confirm(
+        `Are you sure you want to cancel ${invoice.invoice_number}?\n\n` +
+        `This will cancel the invoice and restore the sold stock quantity.`
+    );
+
+    if (!confirmed) {
+        return;
+    }
+
+    try {
+        setCancelling(invoiceId);
+        setError("");
+
+        const response = await api.patch(
+        `/invoices/${invoiceId}/cancel`
+        );
+
+        const updatedInvoice = response.data;
+
+        /*
+        * Update the invoice immediately in the current list.
+        * No full page reload is required.
+        */
+        setInvoices((previousInvoices) =>
+        previousInvoices.map((item) =>
+            item.id === invoiceId
+            ? updatedInvoice
+            : item
+        )
+        );
+    } catch (err) {
+        console.error("Unable to cancel invoice:", err);
+
+        setError(
+        err.response?.data?.detail ||
+            "Unable to cancel invoice."
+        );
+    } finally {
+        setCancelling(null);
+    }
+    }
 
   function formatDate(dateString) {
     if (!dateString) return "-";
@@ -725,6 +781,7 @@ function Invoices() {
                     <th>Total</th>
                     <th>Payment</th>
                     <th>Method</th>
+                    <th>Status</th>
                     <th>Action</th>
                   </tr>
                 </thead>
@@ -802,23 +859,61 @@ function Invoices() {
                         </td>
 
                         <td>
-                          <button
-                            className="secondary-button"
-                            onClick={() =>
-                              downloadInvoice(
-                                invoice.id
-                              )
-                            }
-                            disabled={
-                              downloading ===
-                              invoice.id
-                            }
-                          >
-                            {downloading ===
-                            invoice.id
-                              ? "Opening..."
-                              : "PDF"}
-                          </button>
+                            <span
+                                className={`status-badge ${invoice.status}`}
+                            >
+                                {invoice.status === "cancelled"
+                                ? "Cancelled"
+                                : invoice.status === "issued"
+                                ? "Issued"
+                                : invoice.status || "-"}
+                            </span>
+                        </td>
+
+                        <td>
+                            <div
+                                style={{
+                                display: "flex",
+                                gap: "8px",
+                                flexWrap: "wrap",
+                                }}
+                            >
+                                <button
+                                className="secondary-button"
+                                onClick={() =>
+                                    downloadInvoice(invoice.id)
+                                }
+                                disabled={
+                                    downloading === invoice.id ||
+                                    cancelling === invoice.id
+                                }
+                                >
+                                {downloading === invoice.id
+                                    ? "Opening..."
+                                    : "PDF"}
+                                </button>
+
+                                {invoice.status !== "cancelled" && (
+                                <button
+                                    className="secondary-button"
+                                    onClick={() =>
+                                    cancelInvoice(invoice.id)
+                                    }
+                                    disabled={
+                                    cancelling === invoice.id ||
+                                    downloading === invoice.id
+                                    }
+                                    style={{
+                                    borderColor: "#dc2626",
+                                    color: "#dc2626",
+                                    }}
+                                >
+                                    {cancelling === invoice.id
+                                    ? "Cancelling..."
+                                    : "Cancel"}
+                                </button>
+                                )}
+                            </div>
                         </td>
                       </tr>
                     )

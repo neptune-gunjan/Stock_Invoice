@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 
 from app.models.payment import Payment
 from app.repositories.payment import PaymentRepository
@@ -97,6 +98,7 @@ class PaymentService:
         else:
             invoice.payment_method = "multiple"
 
+        invoice.updated_at = datetime.now(timezone.utc)
         self._invoice_repository.update(invoice, business_id)
 
         return payment
@@ -104,8 +106,23 @@ class PaymentService:
     def get(
         self,
         payment_id: uuid.UUID,
+        business_id: uuid.UUID,
     ) -> Payment | None:
-        return self._payment_repository.get(payment_id)
+
+        payment = self._payment_repository.get(payment_id)
+
+        if payment is None:
+            return None
+
+        invoice = self._invoice_repository.get(
+            payment.invoice_id,
+            business_id,
+        )
+
+        if invoice is None:
+            return None
+
+        return payment
 
     def list_by_invoice(
         self,

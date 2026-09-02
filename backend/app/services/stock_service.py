@@ -65,6 +65,22 @@ class StockService:
 
         return item
 
+    def get_for_business(
+        self,
+        item_id: uuid.UUID,
+        business_id: uuid.UUID,
+    ) -> Optional[StockItem]:
+
+        item = self._repository.get(item_id)
+
+        if (
+            item is None
+            or item.business_id != business_id
+        ):
+            return None
+
+        return item
+
     def create_stock(
         self,
         data: StockCreate,
@@ -658,3 +674,40 @@ class StockService:
 
         finally:
             workbook.close()
+
+
+    def restore_stock_for_cancellation(
+        self,
+        item_id: uuid.UUID,
+        quantity: float,
+        business_id: uuid.UUID,
+    ) -> tuple[StockItem, float, float]:
+        """
+        Restore stock quantity when a sale/invoice is cancelled.
+
+        This intentionally allows soft-deleted stock items because
+        historical invoices may reference products that were deleted later.
+        The stock item remains deleted; only its quantity is restored.
+        """
+
+        existing = self._repository.get(item_id)
+
+        if (
+            existing is None
+            or existing.business_id != business_id
+        ):
+            raise StockNotFoundError(item_id)
+
+        quantity_before = existing.quantity_available
+        quantity_after = quantity_before + quantity
+
+        updated = existing.model_copy(
+            update={
+                "quantity_available": quantity_after,
+                "updated_at": utcnow(),
+            }
+        )
+
+        self._repository.update(updated)
+
+        return updated, quantity_before, quantity_after

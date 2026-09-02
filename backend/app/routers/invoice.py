@@ -19,6 +19,8 @@ from app.schemas.invoice import (
 from app.services.invoice_service import (
     InvoiceService,
     TransactionNotFoundError,
+    InvoiceNotFoundError, 
+    InvalidInvoiceStateError,
 )
 
 
@@ -127,3 +129,41 @@ def get_invoice_pdf(
             )
         },
     )
+
+
+@router.patch(
+    "/{invoice_id}/cancel",
+    response_model=InvoiceRead,
+)
+def cancel_invoice(
+    invoice_id: uuid.UUID,
+    service: InvoiceService = Depends(get_invoice_service),
+    current_user: User = Depends(get_current_user),
+) -> InvoiceRead:
+
+    try:
+        invoice = service.cancel_invoice(
+            invoice_id,
+            current_user.business_id,
+        )
+
+    except InvoiceNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=str(exc),
+        ) from exc
+
+    except TransactionNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=str(exc),
+        ) from exc
+
+    except InvalidInvoiceStateError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=str(exc),
+        ) from exc
+
+    return InvoiceRead.model_validate(invoice)
+

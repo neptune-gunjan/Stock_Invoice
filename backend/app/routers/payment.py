@@ -95,7 +95,7 @@ def get_payment(
     current_user: User = Depends(get_current_user),
 ) -> PaymentRead:
 
-    payment = service.get(payment_id)
+    payment = service.get(payment_id, current_user.business_id)
 
     if payment is None:
         raise HTTPException(
