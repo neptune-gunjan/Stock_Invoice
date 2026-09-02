@@ -7,9 +7,13 @@ function InvoiceDetails() {
   const navigate = useNavigate();
 
   const [invoice, setInvoice] = useState(null);
+  const [customer, setCustomer] = useState(null);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [downloading, setDownloading] = useState(false);
+
+  const [downloading, setDownloading] =
+    useState(false);
 
   useEffect(() => {
     loadInvoice();
@@ -24,7 +28,36 @@ function InvoiceDetails() {
         `/invoices/${invoiceId}`
       );
 
-      setInvoice(response.data);
+      const invoiceData = response.data;
+
+      setInvoice(invoiceData);
+
+      /*
+       * Load customer information
+       */
+      if (invoiceData.customer_id) {
+        try {
+          const customerResponse =
+            await api.get("/customers");
+
+          const customers =
+            customerResponse.data || [];
+
+          const foundCustomer =
+            customers.find(
+              (item) =>
+                item.id ===
+                invoiceData.customer_id
+            );
+
+          setCustomer(foundCustomer || null);
+        } catch (customerError) {
+          console.error(
+            "Unable to load customer:",
+            customerError
+          );
+        }
+      }
     } catch (err) {
       console.error(err);
 
@@ -53,7 +86,8 @@ function InvoiceDetails() {
         type: "application/pdf",
       });
 
-      const url = window.URL.createObjectURL(blob);
+      const url =
+        window.URL.createObjectURL(blob);
 
       window.open(url, "_blank");
 
@@ -70,6 +104,10 @@ function InvoiceDetails() {
     } finally {
       setDownloading(false);
     }
+  }
+
+  function printInvoice() {
+    window.print();
   }
 
   function formatDate(dateString) {
@@ -89,6 +127,25 @@ function InvoiceDetails() {
 
   function currency(value) {
     return `₹${Number(value || 0).toFixed(2)}`;
+  }
+
+  function statusClass(status) {
+    if (!status) {
+      return "status-badge";
+    }
+
+    return `status-badge ${String(
+      status
+    ).toLowerCase()}`;
+  }
+
+  function capitalize(value) {
+    if (!value) return "-";
+
+    return String(value)
+      .charAt(0)
+      .toUpperCase() +
+      String(value).slice(1);
   }
 
   if (loading) {
@@ -122,10 +179,10 @@ function InvoiceDetails() {
     <div className="invoice-page">
       {/* Header */}
 
-      <div className="page-header">
+      <div className="page-header invoice-header">
         <div>
           <button
-            className="secondary-button"
+            className="secondary-button no-print"
             onClick={() => navigate("/invoices")}
           >
             ← Back to Invoices
@@ -141,18 +198,40 @@ function InvoiceDetails() {
           </p>
         </div>
 
-        <button
-          className="primary-button"
-          onClick={downloadInvoice}
-          disabled={downloading}
+        <div
+          className="no-print"
+          style={{
+            display: "flex",
+            gap: "10px",
+            flexWrap: "wrap",
+          }}
         >
-          {downloading
-            ? "Opening PDF..."
-            : "Download PDF"}
-        </button>
+          <button
+            className="secondary-button"
+            onClick={printInvoice}
+          >
+            🖨 Print
+          </button>
+
+          <button
+            className="primary-button"
+            onClick={downloadInvoice}
+            disabled={downloading}
+          >
+            {downloading
+              ? "Opening PDF..."
+              : "Download PDF"}
+          </button>
+        </div>
       </div>
 
-      {/* Invoice information */}
+      {error && (
+        <div className="alert error no-print">
+          {error}
+        </div>
+      )}
+
+      {/* Status Summary */}
 
       <div className="dashboard-grid">
         <div className="dashboard-card">
@@ -160,8 +239,14 @@ function InvoiceDetails() {
             Invoice Status
           </div>
 
-          <div className="card-value">
-            {invoice.status}
+          <div style={{ marginTop: "10px" }}>
+            <span
+              className={statusClass(
+                invoice.status
+              )}
+            >
+              {capitalize(invoice.status)}
+            </span>
           </div>
         </div>
 
@@ -170,8 +255,16 @@ function InvoiceDetails() {
             Payment Status
           </div>
 
-          <div className="card-value">
-            {invoice.payment_status}
+          <div style={{ marginTop: "10px" }}>
+            <span
+              className={statusClass(
+                invoice.payment_status
+              )}
+            >
+              {capitalize(
+                invoice.payment_status
+              )}
+            </span>
           </div>
         </div>
 
@@ -181,7 +274,11 @@ function InvoiceDetails() {
           </div>
 
           <div className="card-value">
-            {invoice.payment_method || "-"}
+            {invoice.payment_method
+              ? capitalize(
+                  invoice.payment_method
+                )
+              : "-"}
           </div>
         </div>
 
@@ -196,7 +293,66 @@ function InvoiceDetails() {
         </div>
       </div>
 
-      {/* Customer / Invoice info */}
+      {/* Customer Information */}
+
+      <div className="dashboard-card">
+        <h2>Customer Information</h2>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns:
+              "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: "20px",
+            marginTop: "20px",
+          }}
+        >
+          <div>
+            <strong>Name</strong>
+
+            <p>
+              {customer?.name ||
+                (invoice.customer_id
+                  ? "Unknown Customer"
+                  : "Walk-in Customer")}
+            </p>
+          </div>
+
+          <div>
+            <strong>Phone</strong>
+
+            <p>
+              {customer?.phone || "-"}
+            </p>
+          </div>
+
+          <div>
+            <strong>Email</strong>
+
+            <p>
+              {customer?.email || "-"}
+            </p>
+          </div>
+
+          <div>
+            <strong>GSTIN</strong>
+
+            <p>
+              {customer?.gstin || "-"}
+            </p>
+          </div>
+
+          <div>
+            <strong>Customer ID</strong>
+
+            <p>
+              {invoice.customer_id || "-"}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Invoice Information */}
 
       <div className="dashboard-card">
         <h2>Invoice Information</h2>
@@ -212,28 +368,41 @@ function InvoiceDetails() {
         >
           <div>
             <strong>Invoice Number</strong>
-            <p>{invoice.invoice_number}</p>
+
+            <p>
+              {invoice.invoice_number}
+            </p>
           </div>
 
           <div>
-            <strong>Customer ID</strong>
+            <strong>Invoice Date</strong>
+
             <p>
-              {invoice.customer_id ||
-                "Walk-in Customer"}
+              {formatDate(invoice.created_at)}
             </p>
           </div>
 
           <div>
             <strong>Transaction ID</strong>
-            <p>
-              {invoice.transaction_id}
+
+            <p
+              style={{
+                wordBreak: "break-all",
+              }}
+            >
+              {invoice.transaction_id || "-"}
             </p>
           </div>
 
           <div>
-            <strong>Created At</strong>
-            <p>
-              {formatDate(invoice.created_at)}
+            <strong>Invoice ID</strong>
+
+            <p
+              style={{
+                wordBreak: "break-all",
+              }}
+            >
+              {invoice.id}
             </p>
           </div>
         </div>
@@ -242,7 +411,29 @@ function InvoiceDetails() {
       {/* Items */}
 
       <div className="dashboard-card">
-        <h2>Items</h2>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "12px",
+          }}
+        >
+          <div>
+            <h2>Invoice Items</h2>
+
+            <p
+              style={{
+                marginTop: "5px",
+              }}
+            >
+              {invoice.items?.length || 0} item
+              {invoice.items?.length !== 1
+                ? "s"
+                : ""}
+            </p>
+          </div>
+        </div>
 
         {!invoice.items ||
         invoice.items.length === 0 ? (
@@ -259,6 +450,7 @@ function InvoiceDetails() {
             <table>
               <thead>
                 <tr>
+                  <th>#</th>
                   <th>Product</th>
                   <th>Unit</th>
                   <th>Quantity</th>
@@ -268,74 +460,63 @@ function InvoiceDetails() {
               </thead>
 
               <tbody>
-                {invoice.items.map((item) => (
-                  <tr key={item.id}>
-                    <td>
-                      <strong>
-                        {item.stock_name}
-                      </strong>
-                    </td>
+                {invoice.items.map(
+                  (item, index) => (
+                    <tr key={item.id}>
+                      <td>
+                        {index + 1}
+                      </td>
 
-                    <td>{item.unit}</td>
+                      <td>
+                        <strong>
+                          {item.stock_name ||
+                            "-"}
+                        </strong>
+                      </td>
 
-                    <td>{item.qty}</td>
+                      <td>
+                        {item.unit || "-"}
+                      </td>
 
-                    <td>
-                      {currency(item.unit_price)}
-                    </td>
+                      <td>
+                        {item.qty}
+                      </td>
 
-                    <td>
-                      <strong>
-                        {currency(item.line_total)}
-                      </strong>
-                    </td>
-                  </tr>
-                ))}
+                      <td>
+                        {currency(
+                          item.unit_price
+                        )}
+                      </td>
+
+                      <td>
+                        <strong>
+                          {currency(
+                            item.line_total
+                          )}
+                        </strong>
+                      </td>
+                    </tr>
+                  )
+                )}
               </tbody>
             </table>
           </div>
         )}
       </div>
 
-      {/* Summary */}
+      {/* Payment Summary */}
 
       <div className="dashboard-card">
         <h2>Payment Summary</h2>
 
         <div
           style={{
-            maxWidth: "420px",
+            maxWidth: "480px",
             marginLeft: "auto",
             marginTop: "20px",
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              padding: "10px 0",
-            }}
-          >
-            <span>Subtotal</span>
-
-            <strong>
-              {currency(invoice.subtotal)}
-            </strong>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              padding: "10px 0",
-            }}
-          >
-            <span>Discount</span>
-
-            <strong>
-              - {currency(invoice.discount)}
-            </strong>
-          </div>
+          {/* Subtotal */}
 
           <div
             style={{
@@ -345,7 +526,47 @@ function InvoiceDetails() {
             }}
           >
             <span>
-              Tax ({invoice.tax_rate}%)
+              Subtotal
+            </span>
+
+            <strong>
+              {currency(invoice.subtotal)}
+            </strong>
+          </div>
+
+          {/* Discount */}
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              padding: "10px 0",
+            }}
+          >
+            <span>
+              Discount
+            </span>
+
+            <strong>
+              - {currency(invoice.discount)}
+            </strong>
+          </div>
+
+          {/* Tax */}
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              padding: "10px 0",
+            }}
+          >
+            <span>
+              Tax{" "}
+              {invoice.tax_rate !== null &&
+              invoice.tax_rate !== undefined
+                ? `(${invoice.tax_rate}%)`
+                : ""}
             </span>
 
             <strong>
@@ -355,23 +576,66 @@ function InvoiceDetails() {
 
           <hr />
 
+          {/* Total */}
+
           <div
             style={{
               display: "flex",
               justifyContent: "space-between",
-              padding: "15px 0",
-              fontSize: "20px",
+              padding: "18px 0",
+              fontSize: "22px",
             }}
           >
             <span>
-              <strong>Total</strong>
+              <strong>
+                Grand Total
+              </strong>
             </span>
 
             <strong>
-              {currency(invoice.total_amount)}
+              {currency(
+                invoice.total_amount
+              )}
             </strong>
           </div>
         </div>
+      </div>
+
+      {/* Bottom Actions */}
+
+      <div
+        className="no-print"
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          gap: "10px",
+          marginTop: "20px",
+          flexWrap: "wrap",
+        }}
+      >
+        <button
+          className="secondary-button"
+          onClick={() => navigate("/invoices")}
+        >
+          ← Back to Invoices
+        </button>
+
+        <button
+          className="secondary-button"
+          onClick={printInvoice}
+        >
+          🖨 Print
+        </button>
+
+        <button
+          className="primary-button"
+          onClick={downloadInvoice}
+          disabled={downloading}
+        >
+          {downloading
+            ? "Opening PDF..."
+            : "Download PDF"}
+        </button>
       </div>
     </div>
   );

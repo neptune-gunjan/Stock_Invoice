@@ -746,3 +746,28 @@ button {
   }
 }
 
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+  }
+
+  .invoice-page {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  .dashboard-card {
+    box-shadow: none !important;
+    border: 1px solid #ddd;
+    break-inside: avoid;
+  }
+
+  button {
+    display: none !important;
+  }
+}
