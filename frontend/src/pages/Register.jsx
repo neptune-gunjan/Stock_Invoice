@@ -53,8 +53,8 @@ function Register() {
       return;
     }
 
-    if (formData.password.length < 6) {
-      setError("Password must be at least 6 characters.");
+    if (formData.password.length < 8) {
+      setError("Password must be at least 8 characters.");
       return;
     }
 
@@ -258,7 +258,7 @@ function Register() {
                   }
                   value={formData.password}
                   onChange={handleChange}
-                  placeholder="Minimum 6 characters"
+                  placeholder="Minimum 8 characters"
                   autoComplete="new-password"
                   disabled={loading}
                 />
@@ -275,7 +275,7 @@ function Register() {
               </div>
 
               <div className="password-hint">
-                Use at least 6 characters for your password.
+                Use at least 8 characters for your password.
               </div>
             </div>
 
