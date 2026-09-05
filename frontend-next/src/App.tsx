@@ -19,6 +19,8 @@ import {
   Trash2,
   UploadCloud,
   X,
+  Save,
+  Store,
   UserPlus,
 } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
@@ -45,6 +47,8 @@ import {
   useInvoiceMutations,
   useCustomerTransactions,
   Customer,
+  useBusiness,
+  useBusinessMutations,
   type ExtractedItem,
   type StockInput,
   type StockItem,
@@ -3079,6 +3083,276 @@ function PaymentPanel({
   );
 }
 
+function BusinessPage() {
+  const business = useBusiness();
+  const { create, update } = useBusinessMutations();
+
+  const [form, setForm] = useState({
+    business_name: '',
+    phone: '',
+    email: '',
+    address: '',
+    gst_number: '',
+  });
+
+  // const [initialized, setInitialized] = useState(false);
+  const [success, setSuccess] = useState('');
+
+  useEffect(() => {
+    if (!business.data) return;
+
+    setForm({
+      business_name: business.data.business_name ?? '',
+      phone: business.data.phone ?? '',
+      email: business.data.email ?? '',
+      address: business.data.address ?? '',
+      gst_number: business.data.gst_number ?? '',
+    });
+  }, [business.data]);
+
+  const isSaving = create.isPending || update.isPending;
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setSuccess('');
+
+    if (!form.business_name.trim()) {
+      return;
+    }
+
+    try {
+      if (business.data?.id) {
+        await update.mutateAsync({
+          businessId: business.data.id,
+          input: {
+            business_name: form.business_name.trim(),
+            phone: form.phone.trim() || null,
+            email: form.email.trim() || null,
+            address: form.address.trim() || null,
+            gst_number: form.gst_number.trim() || null,
+          },
+        });
+
+        setSuccess('Business details updated successfully.');
+      } else {
+        await create.mutateAsync({
+          business_name: form.business_name.trim(),
+          phone: form.phone.trim() || null,
+          email: form.email.trim() || null,
+          address: form.address.trim() || null,
+          gst_number: form.gst_number.trim() || null,
+        });
+
+        setSuccess('Business created successfully.');
+      }
+    } catch (error) {
+      console.error('Business save failed:', error);
+    }
+  };
+
+  if (business.isLoading) {
+    return (
+      <AppShell>
+        <PageHeading
+          eyebrow="Business"
+          title="Business settings"
+          description="Manage the business information used across your invoice desk."
+        />
+
+        <div className="rounded-2xl border border-border bg-card p-8 text-sm text-muted-foreground">
+          Loading business details...
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (business.isError) {
+    return (
+      <AppShell>
+        <PageHeading
+          eyebrow="Business"
+          title="Business settings"
+          description="Manage the business information used across your invoice desk."
+        />
+
+        <ErrorNotice
+          message={errorMessage(
+            business.error,
+            'Could not load business details.',
+          )}
+          onRetry={() => business.refetch()}
+        />
+      </AppShell>
+    );
+  }
+
+  const saveError = create.error || update.error;
+
+  return (
+    <AppShell>
+      <PageHeading
+        eyebrow="Business"
+        title="Business settings"
+        description="Keep your business details ready for invoices and customer records."
+      />
+
+      <div className="max-w-3xl">
+        <form
+          onSubmit={handleSubmit}
+          className="rounded-2xl border border-border bg-card p-6 shadow-sm md:p-8"
+        >
+          <div className="mb-7 flex items-start gap-4">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+              <Store size={21} />
+            </div>
+
+            <div>
+              <h2 className="text-lg font-bold tracking-tight">
+                Business information
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                These details identify your business on the invoice desk.
+              </p>
+            </div>
+          </div>
+
+          {saveError && (
+            <div className="mb-5">
+              <ErrorNotice
+                message={errorMessage(
+                  saveError,
+                  'Could not save business details.',
+                )}
+              />
+            </div>
+          )}
+
+          {success && (
+            <div className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+              {success}
+            </div>
+          )}
+
+          <div className="space-y-5">
+            <div>
+              <label className="mb-2 block text-sm font-semibold">
+                Business name <span className="text-destructive">*</span>
+              </label>
+
+              <input
+                type="text"
+                value={form.business_name}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    business_name: event.target.value,
+                  }))
+                }
+                placeholder="Enter your business name"
+                className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
+                required
+              />
+            </div>
+
+            <div className="grid gap-5 md:grid-cols-2">
+              <div>
+                <label className="mb-2 block text-sm font-semibold">
+                  Phone
+                </label>
+
+                <input
+                  type="tel"
+                  value={form.phone}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      phone: event.target.value,
+                    }))
+                  }
+                  placeholder="Business phone number"
+                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-semibold">
+                  Email
+                </label>
+
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      email: event.target.value,
+                    }))
+                  }
+                  placeholder="Business email"
+                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold">
+                Address
+              </label>
+
+              <textarea
+                value={form.address}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    address: event.target.value,
+                  }))
+                }
+                placeholder="Business address"
+                rows={4}
+                className="w-full resize-none rounded-xl border border-border bg-background px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold">
+                GSTIN
+              </label>
+
+              <input
+                type="text"
+                value={form.gst_number}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    gst_number: event.target.value.toUpperCase(),
+                  }))
+                }
+                placeholder="Enter GSTIN"
+                className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm uppercase outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
+              />
+            </div>
+          </div>
+
+          <div className="mt-8 flex justify-end border-t border-border pt-6">
+            <button
+              type="submit"
+              disabled={isSaving || !form.business_name.trim()}
+              className={`${buttonPrimary} disabled:cursor-not-allowed disabled:opacity-50`}
+            >
+              <Save size={17} />
+              {isSaving
+                ? 'Saving...'
+                : business.data?.id
+                  ? 'Save changes'
+                  : 'Create business'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </AppShell>
+  );
+}
+
 /* ---------------------------------------------------------------------------
  * Shell / routing
  * ------------------------------------------------------------------------ */
@@ -3136,6 +3410,11 @@ function Routes() {
         <Route path="/customers">
           <RequireAuth>
             <CustomersPage />
+          </RequireAuth>
+        </Route>
+        <Route path="/business">
+          <RequireAuth>
+            <BusinessPage />
           </RequireAuth>
         </Route>
         <Route path="/customers/:customerId">

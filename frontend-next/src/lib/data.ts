@@ -204,11 +204,18 @@ export interface Payment {
 
 export interface Business {
   id: string;
-  name: string;
+  business_name: string;
+  owner_name: string | null;
   phone: string | null;
   email: string | null;
   address: string | null;
-  gstin: string | null;
+  gst_number: string | null;
+  invoice_prefix: string;
+  logo_path: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
 }
 
 export interface SalesData {
@@ -577,6 +584,7 @@ export function useBusiness() {
   return useQuery({
     queryKey: queryKeys.business,
     queryFn: endpoints.getBusiness,
+    refetchOnMount: 'always',
   });
 }
 
