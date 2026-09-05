@@ -21,3 +21,17 @@ class CustomerRead(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class CustomerSummaryRead(BaseModel):
+    customer_id: uuid.UUID
+    customer_name: str
+    phone: Optional[str]
+
+    total_invoices: int
+    total_purchase: float
+    total_paid: float
+    total_due: float
+
+    last_purchase_at: Optional[datetime]
+    customer_since: datetime

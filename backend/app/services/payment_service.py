@@ -99,6 +99,7 @@ class PaymentService:
             invoice.payment_method = "multiple"
 
         invoice.updated_at = datetime.now(timezone.utc)
+        
         self._invoice_repository.update(invoice, business_id)
 
         return payment

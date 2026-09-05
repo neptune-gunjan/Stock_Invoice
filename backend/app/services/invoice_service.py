@@ -309,6 +309,47 @@ class InvoiceService:
             remaining_amount,
         )
 
+    def get_payment_summary(
+        self,
+        invoice_id: uuid.UUID,
+        business_id: uuid.UUID,
+    ) -> tuple[float, float, str] | None:
+
+        invoice = self._repository.get(
+            invoice_id,
+            business_id,
+        )
+
+        if invoice is None or invoice.deleted_at is not None:
+            return None
+
+        payments = self._payment_repository.list_by_invoice(
+            invoice_id
+        )
+
+        paid_amount = sum(
+            payment.amount
+            for payment in payments
+        )
+
+        remaining_amount = max(
+            invoice.total_amount - paid_amount,
+            0,
+        )
+
+        if paid_amount >= invoice.total_amount:
+            payment_status = "paid"
+        elif paid_amount > 0:
+            payment_status = "partial"
+        else:
+            payment_status = "pending"
+
+        return (
+            paid_amount,
+            remaining_amount,
+            payment_status,
+        )
+
     # ============================================================
     # List invoices
     # ============================================================

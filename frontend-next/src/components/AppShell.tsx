@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
-import { BarChart3, Boxes, FileCheck2, FilePlus2, History, LogOut, Menu, X } from 'lucide-react';
+import { BarChart3, Boxes, FileCheck2, FilePlus2, History, LogOut, Menu, Users, X } from 'lucide-react';
 import { clearSession } from '@/lib/auth';
 import { useProfile } from '@/lib/data';
 
@@ -9,6 +9,7 @@ const nav = [
   { href: '/upload', label: 'New invoice', icon: FilePlus2 },
   { href: '/catalog', label: 'Stock catalog', icon: Boxes },
   { href: '/transactions', label: 'Transactions', icon: History },
+  { href: '/customers', label: 'Customers', icon: Users },
 ];
 
 export function Mark({ compact = false }: { compact?: boolean }) {
@@ -130,7 +131,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </header>
         <div className="px-5 pb-24 pt-7 md:px-9 md:pb-10">{children}</div>
       </main>
-      <div className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-border bg-card/95 px-2 py-2 backdrop-blur md:hidden">
+      <div className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-border bg-card/95 px-2 py-2 backdrop-blur md:hidden">
         {nav.map(({ href, label, icon: Icon }) => (
           <Link
             key={href}

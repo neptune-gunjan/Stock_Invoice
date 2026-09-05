@@ -56,6 +56,10 @@ class TransactionRead(BaseModel):
     tax: float
     total_amount: float
 
+    paid_amount: float = 0
+    remaining_amount: float = 0
+    payment_status: str = "pending"
+
     created_at: datetime
 
     items: list[TransactionItemRead] = Field(default_factory=list)

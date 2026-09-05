@@ -19,6 +19,7 @@ import {
   Trash2,
   UploadCloud,
   X,
+  UserPlus,
 } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -31,6 +32,8 @@ import {
   money,
   useCustomers,
   useDashboard,
+  useDashboardSales,
+  useExtractionJob,
   useInvoice,
   useInvoices,
   useLowStock,
@@ -38,6 +41,10 @@ import {
   useRecentInvoices,
   useStock,
   useStockMutations,
+  useInvoicePayments,
+  useInvoiceMutations,
+  useCustomerTransactions,
+  Customer,
   type ExtractedItem,
   type StockInput,
   type StockItem,
@@ -395,6 +402,216 @@ function ForgotPassword() {
   );
 }
 
+function SalesChart({
+  data,
+  isLoading,
+  isError,
+  onRetry,
+}: {
+  data: { date: string; sales: string | number }[];
+  isLoading: boolean;
+  isError: boolean;
+  onRetry: () => void;
+}) {
+  const chartData = useMemo(
+    () =>
+      data.slice(-7).map((item) => ({
+        date: item.date,
+        value: Number(item.sales || 0),
+      })),
+    [data],
+  );
+
+  const maxValue = Math.max(
+    ...chartData.map((item) => item.value),
+    1,
+  );
+
+  const totalSales = chartData.reduce(
+    (sum, item) => sum + item.value,
+    0,
+  );
+
+  const points = chartData.map((item, index) => {
+    const x =
+      chartData.length === 1
+        ? 50
+        : (index / (chartData.length - 1)) * 100;
+
+    const y = 90 - (item.value / maxValue) * 70;
+
+    return {
+      ...item,
+      x,
+      y,
+    };
+  });
+
+  const linePoints = points
+    .map((point) => `${point.x},${point.y}`)
+    .join(' ');
+
+  return (
+    <SectionCard className="overflow-hidden">
+      <div className="flex flex-col gap-3 border-b border-border px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">
+            Sales overview
+          </p>
+
+          <h2 className="mt-2 text-xl font-extrabold">
+            Recent sales
+          </h2>
+
+          <p className="mt-1 text-xs text-muted-foreground">
+            Last 7 available days
+          </p>
+        </div>
+
+        <div className="sm:text-right">
+          <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            Total sales
+          </p>
+
+          <p className="mt-1 mono text-2xl font-bold">
+            {money(totalSales)}
+          </p>
+        </div>
+      </div>
+
+      {isLoading && <Loading label="Loading sales…" />}
+
+      {!isLoading && isError && (
+        <div className="p-5">
+          <ErrorNotice
+            message="Could not load sales data."
+            onRetry={onRetry}
+          />
+        </div>
+      )}
+
+      {!isLoading && !isError && chartData.length === 0 && (
+        <div className="px-5 py-12 text-center">
+          <p className="text-sm font-bold">
+            No sales data yet
+          </p>
+
+          <p className="mt-1 text-xs text-muted-foreground">
+            Your sales trend will appear here after invoices are created.
+          </p>
+        </div>
+      )}
+
+      {!isLoading && !isError && chartData.length > 0 && (
+        <div className="p-5">
+          <div className="relative h-64 w-full">
+            <svg
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+              className="h-full w-full"
+              role="img"
+              aria-label="Sales chart"
+            >
+              {/* Grid */}
+              <line
+                x1="0"
+                y1="20"
+                x2="100"
+                y2="20"
+                className="stroke-border"
+                strokeWidth="1"
+                vectorEffect="non-scaling-stroke"
+              />
+
+              <line
+                x1="0"
+                y1="55"
+                x2="100"
+                y2="55"
+                className="stroke-border"
+                strokeWidth="1"
+                vectorEffect="non-scaling-stroke"
+              />
+
+              <line
+                x1="0"
+                y1="90"
+                x2="100"
+                y2="90"
+                className="stroke-border"
+                strokeWidth="1"
+                vectorEffect="non-scaling-stroke"
+              />
+
+              {/* Area */}
+              {points.length > 1 && (
+                <polygon
+                  points={`0,90 ${linePoints} 100,90`}
+                  className="fill-primary/10"
+                />
+              )}
+
+              {/* Line */}
+              {points.length > 1 && (
+                <polyline
+                  points={linePoints}
+                  fill="none"
+                  className="stroke-primary"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  vectorEffect="non-scaling-stroke"
+                />
+              )}
+
+              {/* Points */}
+              {points.map((point) => (
+                <circle
+                  key={point.date}
+                  cx={point.x}
+                  cy={point.y}
+                  r="2"
+                  className="fill-primary"
+                >
+                  <title>
+                    {dateLabel(point.date)} · {money(point.value)}
+                  </title>
+                </circle>
+              ))}
+            </svg>
+          </div>
+
+          {/* Dates */}
+          <div
+            className="mt-3 grid gap-2"
+            style={{
+              gridTemplateColumns: `repeat(${chartData.length}, minmax(0, 1fr))`,
+            }}
+          >
+            {chartData.map((item) => (
+              <div
+                key={item.date}
+                className="text-center"
+              >
+                <p className="mono text-[9px] uppercase tracking-wide text-muted-foreground">
+                  {new Intl.DateTimeFormat('en', {
+                    month: 'short',
+                    day: 'numeric',
+                  }).format(new Date(item.date))}
+                </p>
+
+                <p className="mt-1 mono text-[10px] font-bold">
+                  {money(item.value)}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
 /* ---------------------------------------------------------------------------
  * Dashboard
  * ------------------------------------------------------------------------ */
@@ -404,15 +621,61 @@ function Dashboard() {
   const summary = useDashboard();
   const recent = useRecentInvoices();
   const low = useLowStock();
+  const sales = useDashboardSales();
+
 
   const stats = [
-    { label: 'Stock items', value: summary.data?.total_products ?? '—', note: 'in your catalog', icon: '01' },
-    { label: 'Invoices', value: summary.data?.total_invoices ?? '—', note: 'confirmed so far', icon: '02' },
+    {
+      label: 'Total sales',
+      value:
+        summary.data?.total_sales !== undefined
+          ? money(summary.data.total_sales)
+          : '—',
+      note: `${summary.data?.total_invoices ?? '—'} invoices confirmed`,
+      icon: '01',
+    },
+    {
+      label: 'Total paid',
+      value:
+        summary.data?.total_paid !== undefined
+          ? money(summary.data.total_paid)
+          : '—',
+      note: 'payments received',
+      icon: '02',
+    },
+    {
+      label: 'Outstanding / Due',
+      value:
+        summary.data?.outstanding_amount !== undefined
+          ? money(summary.data.outstanding_amount)
+          : '—',
+      note:
+        summary.data?.outstanding_amount &&
+        summary.data.outstanding_amount > 0
+          ? 'payment still due'
+          : 'all payments settled',
+      icon: '03',
+    },
+    {
+      label: 'Customers',
+      value: summary.data?.total_customers ?? '—',
+      note: 'customers in your records',
+      icon: '04',
+    },
+    {
+      label: 'Products',
+      value: summary.data?.total_products ?? '—',
+      note: 'items in your catalog',
+      icon: '05',
+    },
     {
       label: 'Low stock alerts',
       value: summary.data?.low_stock_products ?? '—',
-      note: summary.data?.low_stock_products ? 'worth checking today' : 'all shelves look good',
-      icon: '03',
+      note:
+        summary.data?.low_stock_products
+          ? 'worth checking today'
+          : 'all shelves look good',
+      icon: '06',
     },
   ];
 
@@ -423,45 +686,115 @@ function Dashboard() {
         title={`Welcome back, ${profile.ownerName.split(' ')[0]}.`}
         description="A clear desk makes a calmer counter. Here’s what needs your attention today."
         action={
-          <Link href="/upload" className={buttonPrimary} data-testid="link-start-invoice">
-            <FilePlus2 size={17} /> New invoice
+          <Link
+            href="/upload"
+            className={buttonPrimary}
+            data-testid="link-start-invoice"
+          >
+            <FilePlus2 size={17} />
+            New invoice
           </Link>
         }
       />
 
       {summary.isError && (
         <div className="mb-6">
-          <ErrorNotice message={errorMessage(summary.error, 'Could not load the dashboard.')} onRetry={() => summary.refetch()} />
+          <ErrorNotice
+            message={errorMessage(
+              summary.error,
+              'Could not load the dashboard.',
+            )}
+            onRetry={() => summary.refetch()}
+          />
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-3">
-        {stats.map((stat, i) => (
-          <SectionCard
-            key={stat.label}
-            className={`rise-in p-5 ${i === 2 && summary.data?.low_stock_products ? 'border-secondary/70 bg-secondary/10' : ''}`}
-          >
-            <div className="flex items-start justify-between">
-              <span className="mono text-[10px] text-muted-foreground">{stat.icon}</span>
-            </div>
-            <p className="mt-8 text-4xl font-extrabold tracking-[-.06em]">{stat.value}</p>
-            <p className="mt-1 text-sm font-bold">{stat.label}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{stat.note}</p>
-          </SectionCard>
-        ))}
+      {/* Dashboard summary */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {stats.map((stat, i) => {
+          const isLowStock =
+            stat.label === 'Low stock alerts' &&
+            Boolean(summary.data?.low_stock_products);
+
+          const isOutstanding =
+            stat.label === 'Outstanding / Due' &&
+            Boolean(summary.data?.outstanding_amount);
+
+          return (
+            <SectionCard
+              key={stat.label}
+              className={`rise-in p-5 ${
+                isLowStock
+                  ? 'border-secondary/70 bg-secondary/10'
+                  : isOutstanding
+                    ? 'border-accent/50 bg-accent/5'
+                    : ''
+              }`}
+            >
+              <div className="flex items-start justify-between">
+                <span className="mono text-[10px] text-muted-foreground">
+                  {stat.icon}
+                </span>
+
+                {isLowStock && (
+                  <span className="rounded-full bg-secondary/20 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-secondary-foreground">
+                    Attention
+                  </span>
+                )}
+
+                {isOutstanding && (
+                  <span className="rounded-full bg-accent/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-accent">
+                    Due
+                  </span>
+                )}
+              </div>
+
+              <p className="mt-7 text-3xl font-extrabold tracking-[-.06em] sm:text-4xl">
+                {stat.value}
+              </p>
+
+              <p className="mt-1 text-sm font-bold">
+                {stat.label}
+              </p>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                {stat.note}
+              </p>
+            </SectionCard>
+          );
+        })}
       </div>
 
+      {/* Sales chart */}
+      <div className="mt-7">
+        <SalesChart
+          data={sales.data ?? []}
+          isLoading={sales.isLoading}
+          isError={sales.isError}
+          onRetry={() => sales.refetch()}
+        />
+      </div>
+
+      {/* Recent invoices + Shelf check */}
       <div className="mt-7 grid gap-6 xl:grid-cols-[1.35fr_.65fr]">
         <SectionCard>
           <div className="flex items-center justify-between border-b border-border px-5 py-5">
             <div>
               <h2 className="font-extrabold">Recent invoices</h2>
-              <p className="mt-1 text-xs text-muted-foreground">The latest from your counter.</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                The latest from your counter.
+              </p>
             </div>
-            <Link href="/transactions" className="text-xs font-bold text-primary hover:underline" data-testid="link-see-all-transactions">
+
+            <Link
+              href="/transactions"
+              className="text-xs font-bold text-primary hover:underline"
+              data-testid="link-see-all-transactions"
+            >
               See all
             </Link>
           </div>
+
           {recent.isLoading ? (
             <Loading />
           ) : recent.data && recent.data.length > 0 ? (
@@ -473,20 +806,35 @@ function Dashboard() {
                   className="flex min-h-[76px] items-center gap-4 px-5 transition hover:bg-muted/50"
                   data-testid={`link-recent-${invoice.id}`}
                 >
-                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-muted mono text-[10px] text-primary">
+                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-muted mono text-xs">
                     {invoice.invoice_number.slice(-2)}
                   </div>
+
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-bold">{invoice.customer_name || 'Walk-in customer'}</p>
+                    <p className="truncate text-sm font-bold">
+                      {invoice.customer_name || 'Walk-in customer'}
+                    </p>
+
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {invoice.invoice_number} · {dateLabel(invoice.created_at)}
+                      {invoice.invoice_number} ·{' '}
+                      {dateLabel(invoice.created_at)}
                     </p>
                   </div>
+
                   <div className="text-right">
-                    <p className="mono text-sm font-medium">{money(invoice.total_amount)}</p>
-                    <p className="mt-1 text-[10px] uppercase text-muted-foreground">{invoice.payment_status}</p>
+                    <p className="mono text-sm font-medium">
+                      {money(invoice.total_amount)}
+                    </p>
+
+                    <p className="mt-1 text-[10px] uppercase text-muted-foreground">
+                      {invoice.payment_status}
+                    </p>
                   </div>
-                  <ArrowRight size={15} className="text-muted-foreground" />
+
+                  <ArrowRight
+                    size={15}
+                    className="text-muted-foreground"
+                  />
                 </Link>
               ))}
             </div>
@@ -496,7 +844,8 @@ function Dashboard() {
               body="Create your first invoice from a handwritten note."
               action={
                 <Link href="/upload" className={buttonPrimary}>
-                  <FilePlus2 size={16} /> New invoice
+                  <FilePlus2 size={16} />
+                  New invoice
                 </Link>
               }
             />
@@ -505,31 +854,52 @@ function Dashboard() {
 
         <SectionCard className="overflow-hidden">
           <div className="border-b border-border bg-primary p-5 text-primary-foreground">
-            <p className="mono text-[10px] uppercase tracking-[.18em] text-primary-foreground/60">Shelf check</p>
+            <p className="mono text-[10px] uppercase tracking-[.18em] text-primary-foreground/60">
+              Shelf check
+            </p>
+
             <h2 className="mt-8 text-2xl font-extrabold tracking-[-.04em]">
-              {low.data && low.data.length > 0 ? `${low.data.length} items need a top-up.` : 'Shelves look steady.'}
+              {low.data && low.data.length > 0
+                ? `${low.data.length} items need a top-up.`
+                : 'Shelves look steady.'}
             </h2>
           </div>
+
           <div className="space-y-4 p-5">
             {low.isLoading ? (
               <Loading />
             ) : low.data && low.data.length > 0 ? (
               low.data.slice(0, 5).map((item) => (
-                <div className="flex items-center justify-between" key={item.id}>
+                <div
+                  className="flex items-center justify-between"
+                  key={item.id}
+                >
                   <div>
                     <p className="text-sm font-bold">{item.name}</p>
+
                     <p className="mt-1 text-xs text-muted-foreground">
                       {item.quantity_available} {item.unit} left
                     </p>
                   </div>
-                  <span className="mono text-xs text-accent">low</span>
+
+                  <span className="mono text-xs text-accent">
+                    low
+                  </span>
                 </div>
               ))
             ) : (
-              <p className="text-sm text-muted-foreground">Nothing is below your threshold.</p>
+              <p className="text-sm text-muted-foreground">
+                Nothing is below your threshold.
+              </p>
             )}
-            <Link href="/catalog" className={`${buttonQuiet} mt-2 w-full text-xs`} data-testid="link-open-catalog">
-              Open catalog <ArrowRight size={15} />
+
+            <Link
+              href="/catalog"
+              className={`${buttonQuiet} mt-2 w-full text-xs`}
+              data-testid="link-open-catalog"
+            >
+              Open catalog
+              <ArrowRight size={15} />
             </Link>
           </div>
         </SectionCard>
@@ -574,18 +944,42 @@ function UploadPage() {
     setLoading(true);
     setError('');
     try {
+      // 1. Upload image and create extraction job
       const job = await endpoints.extract(file);
-      let items = job.items;
+
+      // 2. Fetch the extraction job using GET /extract/{job_id}
+      const latestJob = await endpoints.getJob(job.id);
+
+      // 3. Use the latest extracted items
+      let items: ExtractedItem[] = latestJob.items;
+
+      // 4. Match extracted items with stock
       try {
-        items = await endpoints.matchJob(job.id);
+        items = await endpoints.matchJob(latestJob.id);
       } catch {
-        /* matching is best-effort; fall back to unmatched extracted items */
+        // Matching is best-effort.
+        // If matching fails, continue with extracted items.
       }
-      const payload: ReviewPayload = { job_id: job.id, items };
-      sessionStorage.setItem('sia-review', JSON.stringify(payload));
+
+      // 5. Store data for Review page
+      const payload: ReviewPayload = {
+        job_id: latestJob.id,
+        items,
+      };
+
+      sessionStorage.setItem(
+        'sia-review',
+        JSON.stringify(payload)
+      );
+
+      // 6. Move to Review page
       setLocation('/review');
-    } catch (e) {
-      setError(errorMessage(e, 'The extraction service was unavailable.'));
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to process invoice'
+      );
     } finally {
       setLoading(false);
     }
@@ -715,7 +1109,16 @@ function ReviewPage() {
   const stock = useStock();
   const [jobId, setJobId] = useState<string | null>(null);
   const [rows, setRows] = useState<ReviewRow[]>([]);
-  const [customer, setCustomer] = useState({ name: '', phone: '' });
+  const customers = useCustomers();
+
+  const [customer, setCustomer] = useState({
+    id: null as string | null,
+    name: '',
+    phone: '',
+  });
+
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [showCustomerResults, setShowCustomerResults] = useState(false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -747,6 +1150,18 @@ function ReviewPage() {
     return map;
   }, [stock.data]);
 
+  const filteredCustomers = useMemo(() => {
+    const search = customerSearch.trim().toLowerCase();
+
+    if (!search) return customers.data ?? [];
+
+    return (customers.data ?? []).filter((item) =>
+      `${item.name} ${item.phone ?? ''}`
+        .toLowerCase()
+        .includes(search),
+    );
+  }, [customers.data, customerSearch]);
+
   const priceFor = (row: ReviewRow) => (row.stock_id ? stockById.get(row.stock_id)?.unit_price ?? 0 : 0);
   const total = rows.reduce((sum, row) => sum + row.qty * priceFor(row), 0);
 
@@ -758,19 +1173,70 @@ function ReviewPage() {
       { id: `manual-${Date.now()}`, raw_text: '', stock_id: null, qty: 1, extracted_item_id: null },
     ]);
 
+  const selectCustomer = (item: Customer) => {
+    setCustomer({
+      id: item.id,
+      name: item.name,
+      phone: item.phone ?? '',
+    });
+
+    setCustomerSearch('');
+    setShowCustomerResults(false);
+  };
+
+  const clearCustomer = () => {
+    setCustomer({
+      id: null,
+      name: '',
+      phone: '',
+    });
+    setCustomerSearch('');
+  };
+
   const confirm = async () => {
-    if (rows.length === 0) return setError('Add at least one item.');
-    if (rows.some((row) => !row.stock_id)) return setError('Choose a catalog item for every row before confirming.');
-    if (rows.some((row) => !row.qty || row.qty <= 0)) return setError('Quantity must be greater than 0 on every row.');
+    if (rows.length === 0) {
+      setError('Add at least one item.');
+      return;
+    }
+
+    if (rows.some((row) => !row.stock_id)) {
+      setError('Choose a catalog item for every row before confirming.');
+      return;
+    }
+
+    if (rows.some((row) => !row.qty || row.qty <= 0)) {
+      setError('Quantity must be greater than 0 on every row.');
+      return;
+    }
 
     setSaving(true);
     setError('');
+
     try {
-      let customerId: string | null = null;
-      if (customer.name.trim()) {
-        const created = await endpoints.createCustomer(customer.name.trim(), customer.phone.trim() || undefined);
+      let customerId: string | null = customer.id;
+
+      /*
+      * Existing customer selected:
+      * --------------------------------
+      * customer.id already contains the
+      * database customer ID, so don't create
+      * another customer.
+      *
+      * New customer:
+      * --------------------------------
+      * customer.id is null, but name exists,
+      * so create the customer once and use
+      * the returned ID.
+      */
+      if (!customerId && customer.name.trim()) {
+        const created = await endpoints.createCustomer(
+          customer.name.trim(),
+          customer.phone.trim() || undefined,
+        );
+
         customerId = created.id;
       }
+
       const transaction = await endpoints.confirm({
         extraction_job_id: jobId && isUuid(jobId) ? jobId : null,
         customer_id: customerId,
@@ -780,7 +1246,9 @@ function ReviewPage() {
           extracted_item_id: row.extracted_item_id ?? undefined,
         })),
       });
+
       sessionStorage.removeItem('sia-review');
+
       setLocation(`/invoice/${transaction.invoice_id}`);
     } catch (e) {
       setError(errorMessage(e, 'Could not confirm the invoice.'));
@@ -912,31 +1380,156 @@ function ReviewPage() {
           </div>
         </SectionCard>
         <SectionCard className="mt-6 p-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
-            <div className="flex-1">
-              <label className="text-sm font-bold">
-                Customer <span className="font-normal text-muted-foreground">(optional)</span>
-                <input
-                  className={`${inputClass} mt-2`}
-                  value={customer.name}
-                  onChange={(e) => setCustomer({ ...customer, name: e.target.value })}
-                  placeholder="Walk-in customer"
-                  data-testid="input-customer-name"
-                />
-              </label>
+          <div className="mb-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold">
+                  Customer <span className="font-normal text-muted-foreground">(optional)</span>
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Select an existing customer or enter a new one.
+                </p>
+              </div>
+
+              {customer.id && (
+                <button
+                  type="button"
+                  onClick={clearCustomer}
+                  className="text-xs font-semibold text-muted-foreground hover:text-foreground"
+                >
+                  Clear
+                </button>
+              )}
             </div>
-            <div className="flex-1">
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="relative">
+              <label className="text-sm font-bold">
+                Search customer
+              </label>
+
+              <div className="relative mt-2">
+                <Search
+                  size={16}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                />
+
+                <input
+                  className={`${inputClass} pl-9`}
+                  value={customerSearch}
+                  onFocus={() => setShowCustomerResults(true)}
+                  onChange={(e) => {
+                    setCustomerSearch(e.target.value);
+                    setShowCustomerResults(true);
+
+                    if (customer.id) {
+                      setCustomer({
+                        id: null,
+                        name: '',
+                        phone: '',
+                      });
+                    }
+                  }}
+                  placeholder="Search name or phone"
+                  data-testid="input-customer-search"
+                />
+              </div>
+
+              {showCustomerResults && customerSearch.trim() && (
+                <div className="absolute left-0 right-0 z-20 mt-2 max-h-56 overflow-auto rounded-xl border border-border bg-card p-1 shadow-lg">
+                  {customers.isLoading ? (
+                    <div className="px-3 py-4 text-xs text-muted-foreground">
+                      Loading customers…
+                    </div>
+                  ) : filteredCustomers.length > 0 ? (
+                    filteredCustomers.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => selectCustomer(item)}
+                        className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left hover:bg-muted"
+                      >
+                        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary text-xs font-bold text-primary-foreground">
+                          {item.name.charAt(0).toUpperCase()}
+                        </div>
+
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold">
+                            {item.name}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {item.phone || 'No phone number'}
+                          </p>
+                        </div>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="px-3 py-4 text-xs text-muted-foreground">
+                      No matching customer found.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="text-sm font-bold">
+                Customer name
+              </label>
+
+              <input
+                className={`${inputClass} mt-2`}
+                value={customer.name}
+                onChange={(e) =>
+                  setCustomer({
+                    ...customer,
+                    id: null,
+                    name: e.target.value,
+                  })
+                }
+                placeholder="Walk-in customer"
+                data-testid="input-customer-name"
+              />
+            </div>
+
+            <div>
               <label className="text-sm font-bold">
                 Phone <span className="font-normal text-muted-foreground">(optional)</span>
-                <input
-                  className={`${inputClass} mt-2`}
-                  value={customer.phone}
-                  onChange={(e) => setCustomer({ ...customer, phone: e.target.value })}
-                  placeholder="For their receipt"
-                  data-testid="input-customer-phone"
-                />
               </label>
+
+              <input
+                className={`${inputClass} mt-2`}
+                value={customer.phone}
+                onChange={(e) =>
+                  setCustomer({
+                    ...customer,
+                    phone: e.target.value,
+                  })
+                }
+                placeholder="For their receipt"
+                data-testid="input-customer-phone"
+              />
             </div>
+
+            <div className="flex items-end">
+              {!customer.id && customer.name.trim() && (
+                <div className="flex min-h-11 w-full items-center gap-2 rounded-xl border border-border bg-muted/40 px-4 text-xs text-muted-foreground">
+                  <UserPlus size={15} />
+                  New customer details will be used for this invoice.
+                </div>
+              )}
+
+              {customer.id && (
+                <div className="flex min-h-11 w-full items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 text-xs text-emerald-700 dark:text-emerald-400">
+                  <Check size={15} />
+                  Existing customer selected
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-5 flex justify-end">
             <button
               onClick={confirm}
               disabled={saving || !rows.length}
@@ -945,11 +1538,13 @@ function ReviewPage() {
             >
               {saving ? (
                 <>
-                  <Loader2 className="animate-spin" size={16} /> Saving…
+                  <Loader2 className="animate-spin" size={16} />
+                  Saving…
                 </>
               ) : (
                 <>
-                  Confirm invoice <Check size={17} />
+                  Confirm invoice
+                  <Check size={17} />
                 </>
               )}
             </button>
@@ -970,6 +1565,27 @@ function InvoicePage() {
   const customers = useCustomers();
   const [pdfError, setPdfError] = useState('');
   const [downloading, setDownloading] = useState(false);
+  const { cancel } = useInvoiceMutations();
+  const [cancelError, setCancelError] = useState('');
+
+  const handleCancel = async () => {
+    if (!invoiceId || !invoice.data) return;
+
+    const confirmed = window.confirm(
+      `Cancel invoice ${invoice.data.invoice_number}?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setCancelError('');
+      await cancel.mutateAsync(invoiceId);
+    } catch (e) {
+      setCancelError(
+        errorMessage(e, 'Could not cancel the invoice.')
+      );
+    }
+  };
 
   const customerName = useMemo(() => {
     if (!invoice.data?.customer_id) return null;
@@ -1024,7 +1640,7 @@ function InvoicePage() {
   return (
     <AppShell>
       <div className="mx-auto max-w-4xl">
-        <div className="mb-7 flex items-center justify-between">
+        <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <Link
             href="/transactions"
             className="inline-flex items-center gap-2 text-sm font-bold text-muted-foreground hover:text-foreground"
@@ -1032,9 +1648,34 @@ function InvoicePage() {
           >
             <ArrowLeft size={16} /> Transaction history
           </Link>
-          <button onClick={download} disabled={downloading} className={buttonPrimary} data-testid="button-download-pdf">
-            <Download size={16} /> {downloading ? 'Preparing…' : 'Download PDF'}
-          </button>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleCancel}
+              disabled={cancel.isPending || data.status === 'cancelled'}
+              className={buttonQuiet}
+            >
+              {cancel.isPending ? (
+                <Loader2 className="animate-spin" size={16} />
+              ) : (
+                <X size={16} />
+              )}
+
+              {data.status === 'cancelled'
+                ? 'Cancelled'
+                : 'Cancel invoice'}
+            </button>
+
+            <button
+              onClick={download}
+              disabled={downloading}
+              className={buttonPrimary}
+              data-testid="button-download-pdf"
+            >
+              <Download size={16} />
+              {downloading ? 'Preparing…' : 'Download PDF'}
+            </button>
+          </div>
         </div>
         {pdfError && (
           <div className="mb-4">
@@ -1100,13 +1741,12 @@ function InvoicePage() {
                 This invoice was checked against your catalog before it was saved.
               </p>
             </SectionCard>
-            <SectionCard className="p-5">
-              <p className="mono text-[10px] uppercase tracking-[.17em] text-muted-foreground">Payment</p>
-              <p className="mt-3 font-bold capitalize">{data.payment_status}</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {money(data.paid_amount)} paid · {money(data.remaining_amount)} due
-              </p>
-            </SectionCard>
+            <PaymentPanel
+              invoiceId={invoiceId}
+              paidAmount={data.paid_amount}
+              remainingAmount={data.remaining_amount}
+              paymentStatus={data.payment_status}
+            />
           </div>
         </div>
       </div>
@@ -1416,49 +2056,734 @@ function CatalogPage() {
 }
 
 /* ---------------------------------------------------------------------------
+ * Customers
+ * ------------------------------------------------------------------------ */
+
+function CustomersPage() {
+  const customers = useCustomers();
+
+  const [query, setQuery] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const [form, setForm] = useState({
+    name: '',
+    phone: '',
+  });
+
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const customerList = customers.data ?? [];
+
+  const shown = useMemo(() => {
+    const search = query.toLowerCase().trim();
+
+    if (!search) return customerList;
+
+    return customerList.filter((customer) =>
+      `${customer.name} ${customer.phone ?? ''}`
+        .toLowerCase()
+        .includes(search),
+    );
+  }, [customerList, query]);
+
+  const openCreate = () => {
+    setEditingId(null);
+    setForm({
+      name: '',
+      phone: '',
+    });
+    setError('');
+    setShowForm(true);
+  };
+
+  const openEdit = (customer: any) => {
+    setEditingId(customer.id);
+
+    setForm({
+      name: customer.name ?? '',
+      phone: customer.phone ?? '',
+    });
+
+    setError('');
+    setShowForm(true);
+  };
+
+  const closeForm = () => {
+    setShowForm(false);
+    setEditingId(null);
+
+    setForm({
+      name: '',
+      phone: '',
+    });
+
+    setError('');
+  };
+
+  const saveCustomer = async (event: FormEvent) => {
+    event.preventDefault();
+
+    if (!form.name.trim()) {
+      setError('Customer name is required.');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+
+    try {
+      if (!editingId) {
+        await endpoints.createCustomer(
+          form.name.trim(),
+          form.phone.trim() || undefined,
+        );
+      } else if ((endpoints as any).updateCustomer) {
+        await (endpoints as any).updateCustomer(
+          editingId,
+          form.name.trim(),
+          form.phone.trim() || undefined,
+        );
+      } else {
+        setError(
+          'Customer update API is not available yet. You can still add new customers.',
+        );
+        return;
+      }
+
+      await customers.refetch();
+      closeForm();
+    } catch (e) {
+      setError(
+        errorMessage(e, 'Could not save customer.'),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteCustomer = async (customer: any) => {
+    if (
+      !window.confirm(
+        `Delete customer "${customer.name}"?`,
+      )
+    ) {
+      return;
+    }
+
+    try {
+      if ((endpoints as any).deleteCustomer) {
+        await (endpoints as any).deleteCustomer(customer.id);
+        await customers.refetch();
+      } else {
+        setError(
+          'Customer delete API is not available yet.',
+        );
+      }
+    } catch (e) {
+      setError(
+        errorMessage(e, 'Could not delete customer.'),
+      );
+    }
+  };
+
+  return (
+    <AppShell>
+      <PageHeading
+        eyebrow="Customers"
+        title="Know your customers."
+        description="Keep customer details organized so invoices and receipts are easier to manage."
+        action={
+          <button
+            onClick={openCreate}
+            className={buttonPrimary}
+            data-testid="button-add-customer"
+          >
+            <Plus size={17} />
+            Add customer
+          </button>
+        }
+      />
+
+      {/* Search */}
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row">
+        <div className="relative flex-1">
+          <Search
+            className="absolute left-3 top-3.5 text-muted-foreground"
+            size={17}
+          />
+
+          <input
+            className={`${inputClass} pl-10`}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search customer name or phone"
+            data-testid="input-search-customers"
+          />
+        </div>
+
+        <div className="flex min-h-11 items-center gap-2 rounded-xl border border-border bg-card px-4 text-xs text-muted-foreground">
+          <Filter size={15} />
+          {shown.length} of {customerList.length} customers
+        </div>
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div className="mb-5">
+          <ErrorNotice message={error} />
+        </div>
+      )}
+
+      {/* Add / Edit Form */}
+      {showForm && (
+        <SectionCard className="mb-6 border-secondary-foreground/30 bg-secondary/10 p-5">
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <p className="mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">
+                Customer details
+              </p>
+
+              <h2 className="mt-1 text-lg font-extrabold">
+                {editingId
+                  ? 'Edit customer'
+                  : 'Add new customer'}
+              </h2>
+            </div>
+
+            <button
+              onClick={closeForm}
+              className="rounded-lg p-2 hover:bg-secondary/40"
+              data-testid="button-close-customer-form"
+            >
+              <X size={17} />
+            </button>
+          </div>
+
+          <form
+            onSubmit={saveCustomer}
+            className="grid gap-4 sm:grid-cols-2"
+          >
+            <label className="text-sm font-bold">
+              Customer name
+
+              <input
+                className={`${inputClass} mt-2`}
+                value={form.name}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    name: e.target.value,
+                  })
+                }
+                placeholder="e.g. Rahul Sharma"
+                autoFocus
+                data-testid="input-customer-name"
+              />
+            </label>
+
+            <label className="text-sm font-bold">
+              Phone number
+
+              <input
+                className={`${inputClass} mt-2`}
+                value={form.phone}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    phone: e.target.value,
+                  })
+                }
+                placeholder="e.g. 9876543210"
+                data-testid="input-customer-phone"
+              />
+            </label>
+
+            <div className="flex gap-2 sm:col-span-2">
+              <button
+                type="submit"
+                disabled={saving}
+                className={buttonPrimary}
+                data-testid="button-save-customer"
+              >
+                {saving ? (
+                  <>
+                    <Loader2
+                      size={16}
+                      className="animate-spin"
+                    />
+                    Saving…
+                  </>
+                ) : (
+                  <>
+                    <Check size={16} />
+                    {editingId
+                      ? 'Update customer'
+                      : 'Save customer'}
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={closeForm}
+                className={buttonQuiet}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </SectionCard>
+      )}
+
+      {/* Customer List */}
+      {customers.isError && (
+        <div className="mb-5">
+          <ErrorNotice
+            message={errorMessage(
+              customers.error,
+              'Could not load customers.',
+            )}
+            onRetry={() => customers.refetch()}
+          />
+        </div>
+      )}
+
+      {customers.isLoading ? (
+        <SectionCard>
+          <Loading label="Loading customers…" />
+        </SectionCard>
+      ) : shown.length > 0 ? (
+        <SectionCard className="overflow-hidden">
+
+          {/* Desktop header */}
+          <div className="hidden grid-cols-[1.5fr_1fr_100px] gap-4 border-b border-border bg-muted/45 px-5 py-3 mono text-[10px] uppercase tracking-wider text-muted-foreground sm:grid">
+            <span>Customer</span>
+            <span>Phone</span>
+            <span />
+          </div>
+
+          <div className="divide-y divide-border">
+            {shown.map((customer: any, index: number) => (
+              <div
+                key={customer.id}
+                className="grid gap-4 px-5 py-5 transition hover:bg-muted/30 sm:grid-cols-[1.5fr_1fr_100px] sm:items-center"
+                data-testid={`row-customer-${customer.id}`}
+              >
+                {/* Customer */}
+                <Link
+                  href={`/customers/${customer.id}`}
+                  className="flex min-w-0 items-center gap-3"
+                  data-testid={`link-customer-${customer.id}`}
+                >
+                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary text-sm font-extrabold text-primary-foreground">
+                    {customer.name
+                      ?.trim()
+                      ?.charAt(0)
+                      ?.toUpperCase() || '?'}
+                  </div>
+
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold hover:underline">
+                      {customer.name}
+                    </p>
+
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Customer #{String(index + 1).padStart(2, '0')}
+                    </p>
+                  </div>
+                </Link>
+
+                {/* Phone */}
+                <div>
+                  <p className="text-sm text-muted-foreground">
+                    {customer.phone || 'No phone number'}
+                  </p>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-1 sm:justify-end">
+                  <button
+                    onClick={() => openEdit(customer)}
+                    className="grid h-10 w-10 place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                    aria-label={`Edit ${customer.name}`}
+                    data-testid={`button-edit-customer-${customer.id}`}
+                  >
+                    <Pencil size={16} />
+                  </button>
+
+                  <button
+                    onClick={() => deleteCustomer(customer)}
+                    className="grid h-10 w-10 place-items-center rounded-lg text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
+                    aria-label={`Delete ${customer.name}`}
+                    data-testid={`button-delete-customer-${customer.id}`}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      ) : (
+        <SectionCard>
+          <EmptyState
+            title={
+              query
+                ? 'No customers found'
+                : 'No customers yet'
+            }
+            body={
+              query
+                ? 'Try searching with a different name or phone number.'
+                : 'Add your first customer to keep your invoices organized.'
+            }
+            action={
+              !query ? (
+                <button
+                  onClick={openCreate}
+                  className={buttonPrimary}
+                >
+                  <Plus size={16} />
+                  Add customer
+                </button>
+              ) : undefined
+            }
+          />
+        </SectionCard>
+      )}
+    </AppShell>
+  );
+}
+
+function CustomerDetailPage() {
+  const { customerId } = useParams<{ customerId: string }>();
+
+  const customers = useCustomers();
+  const transactions = useCustomerTransactions(customerId);
+
+  const customer = customers.data?.find(
+    (item) => item.id === customerId,
+  );
+
+  const customerInvoices = transactions.data ?? [];
+
+  const totalPurchase = customerInvoices.reduce(
+    (sum, invoice) => sum + Number(invoice.total_amount || 0),
+    0,
+  );
+
+  const paidAmount = customerInvoices.reduce(
+    (sum, invoice) => sum + Number(invoice.paid_amount || 0),
+    0,
+  );
+
+  const remainingAmount = customerInvoices.reduce(
+    (sum, invoice) => sum + Number(invoice.remaining_amount || 0),
+    0,
+  );
+
+  if (customers.isLoading) {
+    return (
+      <AppShell>
+        <Loading label="Loading customer…" />
+      </AppShell>
+    );
+  }
+
+  if (!customer) {
+    return (
+      <AppShell>
+        <EmptyState
+          title="Customer not found"
+          body="This customer could not be found."
+          action={
+            <Link
+              href="/customers"
+              className={buttonPrimary}
+            >
+              <ArrowLeft size={16} />
+              Back to customers
+            </Link>
+          }
+        />
+      </AppShell>
+    );
+  }
+
+  return (
+    <AppShell>
+      <div className="mx-auto max-w-6xl">
+
+        {/* Back */}
+        <Link
+          href="/customers"
+          className="mb-7 inline-flex items-center gap-2 text-sm font-bold text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft size={16} />
+          Customers
+        </Link>
+
+        {/* Header */}
+        <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+
+          <div className="flex items-center gap-4">
+            <div className="grid h-16 w-16 place-items-center rounded-2xl bg-primary text-xl font-extrabold text-primary-foreground">
+              {customer.name
+                ?.trim()
+                ?.charAt(0)
+                ?.toUpperCase() || '?'}
+            </div>
+
+            <div>
+              <p className="mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">
+                Customer
+              </p>
+
+              <h1 className="mt-1 text-3xl font-extrabold tracking-[-.04em]">
+                {customer.name}
+              </h1>
+
+              <p className="mt-1 text-sm text-muted-foreground">
+                {customer.phone || 'No phone number'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <Link
+              href="/upload"
+              className={buttonPrimary}
+            >
+              <FilePlus2 size={16} />
+              New invoice
+            </Link>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div className="grid gap-4 md:grid-cols-4">
+
+          <SectionCard className="p-5">
+            <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              Invoices
+            </p>
+
+            <p className="mt-5 text-3xl font-extrabold">
+              {customerInvoices.length}
+            </p>
+
+            <p className="mt-1 text-xs text-muted-foreground">
+              Total invoices
+            </p>
+          </SectionCard>
+
+          <SectionCard className="p-5">
+            <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              Purchases
+            </p>
+
+            <p className="mt-5 text-3xl font-extrabold">
+              {money(totalPurchase)}
+            </p>
+
+            <p className="mt-1 text-xs text-muted-foreground">
+              Lifetime purchase
+            </p>
+          </SectionCard>
+
+          <SectionCard className="p-5">
+            <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              Paid
+            </p>
+
+            <p className="mt-5 text-3xl font-extrabold">
+              {money(paidAmount)}
+            </p>
+
+            <p className="mt-1 text-xs text-muted-foreground">
+              Amount received
+            </p>
+          </SectionCard>
+
+          <SectionCard className="border-secondary/70 bg-secondary/10 p-5">
+            <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              Due
+            </p>
+
+            <p className="mt-5 text-3xl font-extrabold">
+              {money(remainingAmount)}
+            </p>
+
+            <p className="mt-1 text-xs text-muted-foreground">
+              Outstanding balance
+            </p>
+          </SectionCard>
+
+        </div>
+
+        {/* Invoice history */}
+        <SectionCard className="mt-7 overflow-hidden">
+
+          <div className="border-b border-border px-5 py-5">
+            <h2 className="font-extrabold">
+              Invoice history
+            </h2>
+
+            <p className="mt-1 text-xs text-muted-foreground">
+              All invoices created for {customer.name}.
+            </p>
+          </div>
+
+          {transactions.isLoading ? (
+            <Loading label="Loading invoices…" />
+          ) : customerInvoices.length ? (
+            <>
+              <div className="hidden grid-cols-[1fr_.8fr_.8fr_120px] gap-4 border-b border-border px-5 py-3 mono text-[10px] uppercase tracking-wider text-muted-foreground sm:grid">
+                <span>Invoice</span>
+                <span>Date</span>
+                <span>Total</span>
+                <span>Payment</span>
+              </div>
+
+              <div className="divide-y divide-border">
+                {customerInvoices.map((invoice) => (
+                  <Link
+                    key={invoice.id}
+                    href={`/invoice/${invoice.invoice_id}`}
+                    className="grid gap-3 px-5 py-4 transition hover:bg-muted/45 sm:grid-cols-[1fr_.8fr_.8fr_120px] sm:items-center"
+                  >
+                    <div>
+                      <p className="text-sm font-bold">
+                        {invoice.invoice_number}
+                      </p>
+
+                      <p className="mt-1 text-xs text-muted-foreground sm:hidden">
+                        {dateLabel(invoice.created_at)}
+                      </p>
+                    </div>
+
+                    <span className="hidden text-sm text-muted-foreground sm:block">
+                      {dateLabel(invoice.created_at)}
+                    </span>
+
+                    <span className="mono text-sm">
+                      {money(invoice.total_amount)}
+                    </span>
+
+                    <span className="mono text-[10px] uppercase tracking-wide text-muted-foreground">
+                      {invoice.payment_status}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </>
+          ) : (
+            <EmptyState
+              title="No invoices yet"
+              body={`${customer.name} does not have any invoices yet.`}
+              action={
+                <Link
+                  href="/upload"
+                  className={buttonPrimary}
+                >
+                  <FilePlus2 size={16} />
+                  Create invoice
+                </Link>
+              }
+            />
+          )}
+
+        </SectionCard>
+      </div>
+    </AppShell>
+  );
+}
+
+
+/* ---------------------------------------------------------------------------
  * Transactions (invoice history)
  * ------------------------------------------------------------------------ */
 
 function TransactionsPage() {
   const invoices = useInvoices();
+  const customers = useCustomers();
+
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
 
-  const rows = (invoices.data ?? []).filter(
-    (invoice) =>
-      (status === 'all' || invoice.payment_status === status) &&
-      invoice.invoice_number.toLowerCase().includes(query.toLowerCase()),
-  );
+  const rows = (invoices.data ?? []).filter((invoice) => {
+    const customer = customers.data?.find(
+      (item) => item.id === invoice.customer_id,
+    );
+
+    const searchText = [
+      invoice.invoice_number,
+      customer?.name ?? '',
+      customer?.phone ?? '',
+    ]
+      .join(' ')
+      .toLowerCase();
+
+    const matchesSearch = searchText.includes(
+      query.trim().toLowerCase(),
+    );
+
+    const matchesStatus =
+      status === 'all' || invoice.payment_status === status;
+
+    return matchesSearch && matchesStatus;
+  });
 
   return (
     <AppShell>
       <PageHeading
         eyebrow="History"
         title="Every sale, in one place."
-        description="Find a past invoice quickly by its number."
+        description="Search by invoice number, customer name, or phone."
         action={
-          <Link href="/upload" className={buttonPrimary} data-testid="link-new-transaction">
-            <FilePlus2 size={17} /> New invoice
+          <Link
+            href="/upload"
+            className={buttonPrimary}
+            data-testid="link-new-transaction"
+          >
+            <FilePlus2 size={17} />
+            New invoice
           </Link>
         }
       />
+
       {invoices.isError && (
         <div className="mb-5">
-          <ErrorNotice message={errorMessage(invoices.error, 'Could not load invoices.')} onRetry={() => invoices.refetch()} />
+          <ErrorNotice
+            message={errorMessage(
+              invoices.error,
+              'Could not load invoices.',
+            )}
+            onRetry={() => invoices.refetch()}
+          />
         </div>
       )}
+
       <SectionCard className="overflow-hidden">
+        {/* Filters */}
         <div className="flex flex-col gap-3 border-b border-border bg-muted/25 p-4 sm:flex-row">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-3.5 text-muted-foreground" size={17} />
+            <Search
+              className="absolute left-3 top-3.5 text-muted-foreground"
+              size={17}
+            />
+
             <input
               className={`${inputClass} pl-10`}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search invoice number"
+              placeholder="Search invoice, customer or phone"
               data-testid="input-search-transactions"
             />
           </div>
+
           <select
             className={`${inputClass} sm:w-44`}
             value={status}
@@ -1471,33 +2796,101 @@ function TransactionsPage() {
             <option value="paid">Paid</option>
           </select>
         </div>
+
         {invoices.isLoading ? (
           <Loading />
         ) : rows.length ? (
           <>
-            <div className="hidden grid-cols-[1fr_.8fr_.8fr_120px] gap-4 border-b border-border px-5 py-3 mono text-[10px] uppercase tracking-wider text-muted-foreground sm:grid">
-              <span>Invoice</span>
+            {/* Desktop header */}
+            <div className="hidden grid-cols-[1.25fr_.75fr_.7fr_.7fr_.7fr_100px] gap-4 border-b border-border bg-muted/45 px-5 py-3 mono text-[10px] uppercase tracking-wider text-muted-foreground sm:grid">
+              <span>Invoice / Customer</span>
               <span>Date</span>
               <span>Total</span>
               <span>Payment</span>
             </div>
+
+            {/* Rows */}
             <div className="divide-y divide-border">
-              {rows.map((invoice) => (
-                <Link
-                  href={`/invoice/${invoice.id}`}
-                  key={invoice.id}
-                  className="grid gap-3 px-5 py-4 transition hover:bg-muted/45 sm:grid-cols-[1fr_.8fr_.8fr_120px] sm:items-center sm:gap-4"
-                  data-testid={`link-transaction-${invoice.id}`}
-                >
-                  <div>
-                    <p className="text-sm font-bold">{invoice.invoice_number}</p>
-                    <p className="mt-1 text-xs text-muted-foreground sm:hidden">{dateLabel(invoice.created_at)}</p>
-                  </div>
-                  <span className="hidden text-sm text-muted-foreground sm:block">{dateLabel(invoice.created_at)}</span>
-                  <span className="mono text-sm">{money(invoice.total_amount)}</span>
-                  <span className="mono text-[10px] uppercase tracking-wide text-muted-foreground">{invoice.payment_status}</span>
-                </Link>
-              ))}
+              {rows.map((invoice) => {
+                const customer = customers.data?.find(
+                  (item) => item.id === invoice.customer_id,
+                );
+
+                const paidAmount = Number(
+                  invoice.paid_amount ?? 0,
+                );
+
+                const dueAmount = Number(
+                  invoice.remaining_amount ??
+                    Math.max(
+                      Number(invoice.total_amount) - paidAmount,
+                      0,
+                    ),
+                );
+
+                return (
+                  <Link
+                    href={`/invoice/${invoice.id}`}
+                    key={invoice.id}
+                    className="grid gap-3 px-5 py-4 transition hover:bg-muted/45 sm:grid-cols-[1.25fr_.75fr_.7fr_.7fr_.7fr_100px] sm:items-center sm:gap-4"
+                    data-testid={`link-transaction-${invoice.id}`}
+                  >
+                    {/* Invoice / Customer */}
+                    <div>
+                      <p className="text-sm font-bold">
+                        {invoice.invoice_number}
+                      </p>
+
+                      {customer ? (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {customer.name}
+                          {customer.phone
+                            ? ` · ${customer.phone}`
+                            : ''}
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Walk-in customer
+                        </p>
+                      )}
+
+                      {/* Mobile date */}
+                      <p className="mt-1 text-xs text-muted-foreground sm:hidden">
+                        {dateLabel(invoice.created_at)}
+                      </p>
+                    </div>
+
+                    {/* Date */}
+                    <span className="hidden text-sm text-muted-foreground sm:block">
+                      {dateLabel(invoice.created_at)}
+                    </span>
+
+                    {/* Total */}
+                    <div>
+                      <p className="mono text-sm">
+                        {money(invoice.total_amount)}
+                      </p>
+
+                      <p className="mt-1 text-[9px] uppercase tracking-wide text-muted-foreground sm:hidden">
+                        Total
+                      </p>
+                    </div>
+
+                    {/* Payment status */}
+                    <span
+                      className={`mono text-[10px] uppercase tracking-wide ${
+                        invoice.payment_status === 'paid'
+                          ? 'font-bold text-[hsl(146_34%_35%)]'
+                          : invoice.payment_status === 'partial'
+                            ? 'font-bold text-amber-600'
+                            : 'text-muted-foreground'
+                      }`}
+                    >
+                      {invoice.payment_status}
+                    </span>
+                  </Link>
+                );
+              })}
             </div>
           </>
         ) : (
@@ -1505,14 +2898,184 @@ function TransactionsPage() {
             title="No invoices found"
             body="Try clearing the filters, or create a new invoice from a handwritten note."
             action={
-              <Link href="/upload" className={buttonPrimary}>
-                <FilePlus2 size={16} /> Create invoice
+              <Link
+                href="/upload"
+                className={buttonPrimary}
+              >
+                <FilePlus2 size={16} />
+                Create invoice
               </Link>
             }
           />
         )}
       </SectionCard>
     </AppShell>
+  );
+}
+
+function PaymentPanel({
+  invoiceId,
+  paidAmount,
+  remainingAmount,
+  paymentStatus,
+}: {
+  invoiceId: string;
+  paidAmount: number;
+  remainingAmount: number;
+  paymentStatus: string;
+}) {
+  const payments = useInvoicePayments(invoiceId);
+  const { addPayment } = useInvoiceMutations();
+
+  const [amount, setAmount] = useState('');
+  const [method, setMethod] = useState('cash');
+  const [error, setError] = useState('');
+
+  const submit = async () => {
+    const value = Number(amount);
+
+    if (!value || value <= 0) {
+      setError('Enter a valid payment amount.');
+      return;
+    }
+
+    if (value > remainingAmount) {
+      setError('Payment cannot be greater than the remaining amount.');
+      return;
+    }
+
+    setError('');
+
+    try {
+      await addPayment.mutateAsync({
+        invoiceId,
+        input: {
+          amount: value,
+          payment_method: method,
+        },
+      });
+
+      setAmount('');
+    } catch (e) {
+      setError(errorMessage(e, 'Could not add payment.'));
+    }
+  };
+
+  return (
+    <SectionCard className="p-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="mono text-[10px] uppercase tracking-[.17em] text-muted-foreground">
+            Payment
+          </p>
+
+          <p className="mt-3 font-bold capitalize">
+            {paymentStatus.toLowerCase() === 'paid'
+              ? 'paid'
+              : 'pending'}
+          </p>
+        </div>
+
+        <span className="mono text-lg">
+          {money(
+            paymentStatus.toLowerCase() === 'paid'
+              ? paidAmount
+              : remainingAmount
+          )}
+        </span>
+      </div>
+
+      <p className="mt-1 text-xs text-muted-foreground">
+        {money(paidAmount)} paid · {money(remainingAmount)} due
+      </p>
+
+      {remainingAmount > 0 && (
+        <div className="mt-5 space-y-3">
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            max={remainingAmount}
+            className={inputClass}
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="Payment amount"
+          />
+
+          <select
+            className={inputClass}
+            value={method}
+            onChange={(e) => setMethod(e.target.value)}
+          >
+            <option value="cash">Cash</option>
+            <option value="upi">UPI</option>
+            <option value="card">Card</option>
+            <option value="bank_transfer">Bank transfer</option>
+          </select>
+
+          {error && (
+            <p className="text-sm font-semibold text-destructive">
+              {error}
+            </p>
+          )}
+
+          <button
+            onClick={submit}
+            disabled={addPayment.isPending}
+            className={`${buttonPrimary} w-full`}
+          >
+            {addPayment.isPending ? (
+              <>
+                <Loader2 className="animate-spin" size={16} />
+                Saving…
+              </>
+            ) : (
+              <>
+                <Check size={16} />
+                Add payment
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      <div className="mt-5 border-t border-border pt-4">
+        <p className="mono text-[10px] uppercase tracking-[.17em] text-muted-foreground">
+          Payment history
+        </p>
+
+        {payments.isLoading ? (
+          <Loading label="Loading payments…" />
+        ) : payments.data?.length ? (
+          <div className="mt-3 space-y-3">
+            {payments.data.map((payment) => (
+              <div
+                key={payment.id}
+                className="flex items-center justify-between rounded-xl bg-muted/40 px-3 py-3"
+              >
+                <div>
+                  <p className="text-sm font-bold capitalize">
+                    {payment.payment_method}
+                  </p>
+
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {dateLabel(payment.created_at)}
+                  </p>
+                </div>
+
+                <span className="mono text-sm">
+                  {money(payment.amount)}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 text-xs text-muted-foreground">
+            No payments recorded yet.
+          </p>
+        )}
+      </div>
+    </SectionCard>
   );
 }
 
@@ -1568,6 +3131,16 @@ function Routes() {
         <Route path="/catalog">
           <RequireAuth>
             <CatalogPage />
+          </RequireAuth>
+        </Route>
+        <Route path="/customers">
+          <RequireAuth>
+            <CustomersPage />
+          </RequireAuth>
+        </Route>
+        <Route path="/customers/:customerId">
+          <RequireAuth>
+            <CustomerDetailPage />
           </RequireAuth>
         </Route>
         <Route path="/transactions">

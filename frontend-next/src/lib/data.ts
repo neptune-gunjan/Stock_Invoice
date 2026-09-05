@@ -1,8 +1,8 @@
 /**
- * Backend-shaped types, endpoint functions, and React Query hooks.
+ * Backend-shaped API types, endpoint functions, and React Query hooks.
  *
- * Field names mirror the FastAPI response models (snake_case) so there is
- * exactly one shape to reason about between the wire and the components.
+ * Field names mirror the FastAPI response models (snake_case), so the
+ * frontend uses the same data shape as the backend.
  */
 
 import {
@@ -15,9 +15,9 @@ import {
 import { apiBlob, apiJson, apiVoid } from './api';
 import { getStoredUser } from './auth';
 
-/* ----------------------------------------------------------------------------
+/* ============================================================================
  * Types
- * ------------------------------------------------------------------------- */
+ * ========================================================================== */
 
 export interface StockItem {
   id: string;
@@ -98,8 +98,25 @@ export interface Transaction {
   discount: number;
   tax: number;
   total_amount: number;
+
+  paid_amount: number;
+  remaining_amount: number;
+  payment_status: string;
+
   created_at: string;
   items: TransactionItem[];
+}
+
+export interface CustomerSummary {
+  customer_id: string;
+  customer_name: string;
+  phone: string | null;
+  total_invoices: number;
+  total_purchase: number;
+  total_paid: number;
+  total_due: number;
+  last_purchase_at: string | null;
+  customer_since: string;
 }
 
 export interface Invoice {
@@ -117,6 +134,8 @@ export interface Invoice {
   payment_method: string | null;
   pdf_path: string | null;
   created_at: string;
+  paid_amount?: number;
+  remaining_amount?: number;
 }
 
 export interface InvoiceItem {
@@ -164,67 +183,279 @@ export interface RecentInvoice {
 export interface LowStockProduct {
   id: string;
   name: string;
-  sku: string;
+  sku: string | null;
   unit: string;
   quantity_available: number;
   low_stock_threshold: number;
 }
 
-/* ----------------------------------------------------------------------------
- * Endpoint functions
- * ------------------------------------------------------------------------- */
+export interface PaymentInput {
+  amount: number;
+  payment_method: string;
+}
+
+export interface Payment {
+  id: string;
+  invoice_id: string;
+  amount: number;
+  payment_method: string;
+  created_at: string;
+}
+
+export interface Business {
+  id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  gstin: string | null;
+}
+
+export interface SalesData {
+  date: string;
+  sales: number | string;
+  invoice_count: number;
+}
+
+/* ============================================================================
+ * API Endpoints
+ * ========================================================================== */
 
 export const endpoints = {
-  listStock: () => apiJson<StockItem[]>('/stock'),
-  createStock: (input: StockInput) => apiJson<StockItem>('/stock', { method: 'POST', body: input }),
+  /* --------------------------------------------------------------------------
+   * Stock
+   * ------------------------------------------------------------------------ */
+
+  listStock: () =>
+    apiJson<StockItem[]>('/stock'),
+
+  createStock: (input: StockInput) =>
+    apiJson<StockItem>('/stock', {
+      method: 'POST',
+      body: input,
+    }),
+
   updateStock: (id: string, input: Partial<StockInput>) =>
-    apiJson<StockItem>(`/stock/${id}`, { method: 'PATCH', body: input }),
-  deleteStock: (id: string) => apiVoid(`/stock/${id}`, { method: 'DELETE' }),
+    apiJson<StockItem>(`/stock/${id}`, {
+      method: 'PATCH',
+      body: input,
+    }),
+
+  deleteStock: (id: string) =>
+    apiVoid(`/stock/${id}`, {
+      method: 'DELETE',
+    }),
+
+  importStock: (file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+
+    return apiJson<StockItem[]>('/stock/import', {
+      method: 'POST',
+      body: form,
+    });
+  },
+
+  /* --------------------------------------------------------------------------
+   * Extraction
+   * ------------------------------------------------------------------------ */
 
   extract: (file: File) => {
     const form = new FormData();
     form.append('file', file);
-    return apiJson<ExtractionJob>('/extract', { method: 'POST', body: form });
+
+    return apiJson<ExtractionJob>('/extract', {
+      method: 'POST',
+      body: form,
+    });
   },
-  matchJob: (jobId: string) => apiJson<ExtractedItem[]>(`/match/${jobId}`, { method: 'POST' }),
-  getJob: (jobId: string) => apiJson<ExtractionJob>(`/extract/${jobId}`),
+
+  matchJob: (jobId: string) =>
+    apiJson<ExtractedItem[]>(`/match/${jobId}`, {
+      method: 'POST',
+    }),
+
+  getJob: (jobId: string) =>
+    apiJson<ExtractionJob>(`/extract/${jobId}`),
+
+  /* --------------------------------------------------------------------------
+   * Confirmation / Transaction
+   * ------------------------------------------------------------------------ */
 
   confirm: (payload: ConfirmRequest) =>
-    apiJson<Transaction>('/confirm', { method: 'POST', body: payload }),
+    apiJson<Transaction>('/confirm', {
+      method: 'POST',
+      body: payload,
+    }),
 
-  listInvoices: () => apiJson<Invoice[]>('/invoices'),
-  getInvoice: (id: string) => apiJson<InvoiceDetail>(`/invoices/${id}`),
-  invoicePdf: (id: string) => apiBlob(`/invoices/${id}/pdf`),
+  getTransaction: (transactionId: string) =>
+    apiJson<Transaction>(`/transactions/${transactionId}`),
 
-  listCustomers: () => apiJson<Customer[]>('/customers'),
+  /* --------------------------------------------------------------------------
+   * Invoices
+   * ------------------------------------------------------------------------ */
+
+  listInvoices: () =>
+    apiJson<Invoice[]>('/invoices'),
+
+  getInvoice: (id: string) =>
+    apiJson<InvoiceDetail>(`/invoices/${id}`),
+
+  invoicePdf: (id: string) =>
+    apiBlob(`/invoices/${id}/pdf`),
+
+  cancelInvoice: (invoiceId: string) =>
+    apiJson<Invoice>(`/invoices/${invoiceId}/cancel`, {
+      method: 'PATCH',
+    }),
+
+  /* --------------------------------------------------------------------------
+   * Customers
+   * ------------------------------------------------------------------------ */
+
+  listCustomers: () =>
+    apiJson<Customer[]>('/customers'),
+
   createCustomer: (name: string, phone?: string) =>
-    apiJson<Customer>('/customers', { method: 'POST', body: { name, phone: phone || null } }),
+    apiJson<Customer>('/customers', {
+      method: 'POST',
+      body: {
+        name,
+        phone: phone || null,
+      },
+    }),
 
-  dashboardSummary: () => apiJson<DashboardSummary>('/dashboard'),
-  recentInvoices: () => apiJson<RecentInvoice[]>('/dashboard/recent-invoices'),
-  lowStock: () => apiJson<LowStockProduct[]>('/dashboard/low-stock'),
+  customerTransactions: (customerId: string) =>
+    apiJson<Transaction[]>(
+      `/customers/${customerId}/transactions`,
+    ),
+
+  customerSummary: (customerId: string) =>
+    apiJson<CustomerSummary>(
+      `/customers/${customerId}/summary`,
+    ),
+
+  /* --------------------------------------------------------------------------
+   * Payments
+   * ------------------------------------------------------------------------ */
+
+  listPayments: (invoiceId: string) =>
+    apiJson<Payment[]>(`/invoices/${invoiceId}/payments`),
+
+  addPayment: (invoiceId: string, input: PaymentInput) =>
+    apiJson<Payment>(`/invoices/${invoiceId}/payments`, {
+      method: 'POST',
+      body: input,
+    }),
+
+  getPayment: (paymentId: string) =>
+    apiJson<Payment>(`/invoices/payments/${paymentId}`),
+
+  /* --------------------------------------------------------------------------
+   * Dashboard
+   * ------------------------------------------------------------------------ */
+
+  dashboardSummary: () =>
+    apiJson<DashboardSummary>('/dashboard'),
+
+  recentInvoices: () =>
+    apiJson<RecentInvoice[]>('/dashboard/recent-invoices'),
+
+  lowStock: () =>
+    apiJson<LowStockProduct[]>('/dashboard/low-stock'),
+
+  dashboardSales: () =>
+    apiJson<SalesData[]>('/dashboard/sales'),
+
+  /* --------------------------------------------------------------------------
+   * Business
+   * ------------------------------------------------------------------------ */
+
+  getBusiness: () =>
+    apiJson<Business>('/business'),
+
+  createBusiness: (input: Partial<Business>) =>
+    apiJson<Business>('/business', {
+      method: 'POST',
+      body: input,
+    }),
+
+  updateBusiness: (
+    businessId: string,
+    input: Partial<Business>,
+  ) =>
+    apiJson<Business>(`/business/${businessId}`, {
+      method: 'PATCH',
+      body: input,
+    }),
 };
 
-/* ----------------------------------------------------------------------------
- * React Query hooks
- * ------------------------------------------------------------------------- */
+/* ============================================================================
+ * React Query Keys
+ * ========================================================================== */
 
 export const queryKeys = {
   stock: ['stock'] as const,
+
   invoices: ['invoices'] as const,
-  invoice: (id: string) => ['invoices', id] as const,
+
+  invoice: (id: string) =>
+    ['invoices', id] as const,
+
+  invoicePayments: (id: string) =>
+    ['invoices', id, 'payments'] as const,
+
   customers: ['customers'] as const,
+
+  customerTransactions: (id: string) =>
+    ['customers', id, 'transactions'] as const,
+
+  customerSummary: (id: string) =>
+    ['customers', id, 'summary'] as const,
+
   dashboard: ['dashboard'] as const,
+
   recentInvoices: ['dashboard', 'recent-invoices'] as const,
+
   lowStock: ['dashboard', 'low-stock'] as const,
+
+  dashboardSales: ['dashboard', 'sales'] as const,
+
+  extractionJob: (id: string) =>
+    ['extraction-job', id] as const,
+
+  payment: (id: string) =>
+    ['payments', id] as const,
+
+  business: ['business'] as const,
+
+  transaction: (id: string) =>
+    ['transactions', id] as const,
 };
 
-export function useStock(options?: Partial<UseQueryOptions<StockItem[]>>) {
-  return useQuery({ queryKey: queryKeys.stock, queryFn: endpoints.listStock, ...options });
+/* ============================================================================
+ * Stock Queries
+ * ========================================================================== */
+
+export function useStock(
+  options?: Partial<UseQueryOptions<StockItem[]>>,
+) {
+  return useQuery({
+    queryKey: queryKeys.stock,
+    queryFn: endpoints.listStock,
+    ...options,
+  });
 }
 
+/* ============================================================================
+ * Invoice Queries
+ * ========================================================================== */
+
 export function useInvoices() {
-  return useQuery({ queryKey: queryKeys.invoices, queryFn: endpoints.listInvoices });
+  return useQuery({
+    queryKey: queryKeys.invoices,
+    queryFn: endpoints.listInvoices,
+  });
 }
 
 export function useInvoice(id: string | undefined) {
@@ -235,49 +466,428 @@ export function useInvoice(id: string | undefined) {
   });
 }
 
-export function useCustomers() {
-  return useQuery({ queryKey: queryKeys.customers, queryFn: endpoints.listCustomers });
+export function useInvoicePayments(
+  invoiceId: string | undefined,
+) {
+  return useQuery({
+    queryKey: queryKeys.invoicePayments(invoiceId ?? ''),
+    queryFn: () =>
+      endpoints.listPayments(invoiceId as string),
+    enabled: Boolean(invoiceId),
+  });
 }
 
+/* ============================================================================
+ * Customer Queries
+ * ========================================================================== */
+
+export function useCustomers() {
+  return useQuery({
+    queryKey: queryKeys.customers,
+    queryFn: endpoints.listCustomers,
+  });
+}
+
+export function useCustomerTransactions(
+  customerId: string | undefined,
+) {
+  return useQuery({
+    queryKey: queryKeys.customerTransactions(customerId ?? ''),
+    queryFn: () =>
+      endpoints.customerTransactions(customerId as string),
+    enabled: Boolean(customerId),
+  });
+}
+
+export function useCustomerSummary(customerId: string) {
+  return useQuery({
+    queryKey: queryKeys.customerSummary(customerId),
+    queryFn: () => endpoints.customerSummary(customerId),
+    enabled: Boolean(customerId),
+  });
+}
+
+/* ============================================================================
+ * Dashboard Queries
+ * ========================================================================== */
+
 export function useDashboard() {
-  return useQuery({ queryKey: queryKeys.dashboard, queryFn: endpoints.dashboardSummary });
+  return useQuery({
+    queryKey: queryKeys.dashboard,
+    queryFn: endpoints.dashboardSummary,
+  });
 }
 
 export function useRecentInvoices() {
-  return useQuery({ queryKey: queryKeys.recentInvoices, queryFn: endpoints.recentInvoices });
+  return useQuery({
+    queryKey: queryKeys.recentInvoices,
+    queryFn: endpoints.recentInvoices,
+  });
 }
 
 export function useLowStock() {
-  return useQuery({ queryKey: queryKeys.lowStock, queryFn: endpoints.lowStock });
+  return useQuery({
+    queryKey: queryKeys.lowStock,
+    queryFn: endpoints.lowStock,
+  });
 }
+
+export function useDashboardSales() {
+  return useQuery({
+    queryKey: queryKeys.dashboardSales,
+    queryFn: endpoints.dashboardSales,
+  });
+}
+
+/* ============================================================================
+ * Extraction Queries
+ * ========================================================================== */
+
+export function useExtractionJob(
+  jobId: string | undefined,
+) {
+  return useQuery({
+    queryKey: queryKeys.extractionJob(jobId ?? ''),
+    queryFn: () =>
+      endpoints.getJob(jobId as string),
+    enabled: Boolean(jobId),
+  });
+}
+
+/* ============================================================================
+ * Payment Queries
+ * ========================================================================== */
+
+export function usePayment(
+  paymentId: string | undefined,
+) {
+  return useQuery({
+    queryKey: queryKeys.payment(paymentId ?? ''),
+    queryFn: () =>
+      endpoints.getPayment(paymentId as string),
+    enabled: Boolean(paymentId),
+  });
+}
+
+/* ============================================================================
+ * Business Queries
+ * ========================================================================== */
+
+export function useBusiness() {
+  return useQuery({
+    queryKey: queryKeys.business,
+    queryFn: endpoints.getBusiness,
+  });
+}
+
+/* ============================================================================
+ * Transaction Queries
+ * ========================================================================== */
+
+export function useTransaction(
+  transactionId: string | undefined,
+) {
+  return useQuery({
+    queryKey: queryKeys.transaction(transactionId ?? ''),
+    queryFn: () =>
+      endpoints.getTransaction(transactionId as string),
+    enabled: Boolean(transactionId),
+  });
+}
+
+/* ============================================================================
+ * Stock Mutations
+ * ========================================================================== */
 
 export function useStockMutations() {
-  const qc = useQueryClient();
-  const invalidate = () => qc.invalidateQueries({ queryKey: queryKeys.stock });
+  const queryClient = useQueryClient();
 
-  const create = useMutation({ mutationFn: endpoints.createStock, onSuccess: invalidate });
-  const update = useMutation({
-    mutationFn: ({ id, input }: { id: string; input: Partial<StockInput> }) =>
-      endpoints.updateStock(id, input),
-    onSuccess: invalidate,
+  const invalidateStock = () => {
+    return queryClient.invalidateQueries({
+      queryKey: queryKeys.stock,
+    });
+  };
+
+  const create = useMutation({
+    mutationFn: endpoints.createStock,
+
+    onSuccess: invalidateStock,
   });
-  const remove = useMutation({ mutationFn: endpoints.deleteStock, onSuccess: invalidate });
 
-  return { create, update, remove };
-}
+  const update = useMutation({
+    mutationFn: ({
+      id,
+      input,
+    }: {
+      id: string;
+      input: Partial<StockInput>;
+    }) => endpoints.updateStock(id, input),
 
-/* ----------------------------------------------------------------------------
- * Convenience
- * ------------------------------------------------------------------------- */
+    onSuccess: invalidateStock,
+  });
 
-/** The signed-in user's display info, read from the cached login response. */
-export function useProfile() {
-  const user = getStoredUser();
+  const remove = useMutation({
+    mutationFn: endpoints.deleteStock,
+
+    onSuccess: invalidateStock,
+  });
+
   return {
-    ownerName: user?.name ?? 'Shop owner',
-    email: user?.email ?? '',
-    shopName: 'Your shop',
+    create,
+    update,
+    remove,
   };
 }
 
-export const money = (n: number) => `₹${Number(n || 0).toFixed(2)}`;
+/* ============================================================================
+ * Extraction Mutations
+ * ========================================================================== */
+
+export function useExtract() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: endpoints.extract,
+
+    onSuccess: (job) => {
+      queryClient.setQueryData(
+        queryKeys.extractionJob(job.id),
+        job,
+      );
+    },
+  });
+}
+
+export function useMatchJob() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: endpoints.matchJob,
+
+    onSuccess: (_, jobId) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.extractionJob(jobId),
+      });
+    },
+  });
+}
+
+/* ============================================================================
+ * Invoice Mutations
+ * ========================================================================== */
+
+export function useInvoiceMutations() {
+  const queryClient = useQueryClient();
+
+  const cancel = useMutation({
+    mutationFn: endpoints.cancelInvoice,
+
+    onSuccess: (_, invoiceId) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.invoices,
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.invoice(invoiceId),
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.dashboard,
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.recentInvoices,
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.stock,
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.lowStock,
+      });
+    },
+  });
+
+  const addPayment = useMutation({
+    mutationFn: ({
+      invoiceId,
+      input,
+    }: {
+      invoiceId: string;
+      input: PaymentInput;
+    }) =>
+      endpoints.addPayment(invoiceId, input),
+
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.invoices,
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.invoice(
+          variables.invoiceId,
+        ),
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.invoicePayments(
+          variables.invoiceId,
+        ),
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.dashboard,
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.recentInvoices,
+      });
+    },
+  });
+
+  return {
+    cancel,
+    addPayment,
+  };
+}
+
+/* ============================================================================
+ * Transaction Mutations
+ * ========================================================================== */
+
+export function useConfirmTransaction() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: endpoints.confirm,
+
+    onSuccess: (transaction) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.stock,
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.invoices,
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.dashboard,
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.recentInvoices,
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.lowStock,
+      });
+
+      queryClient.setQueryData(
+        queryKeys.transaction(transaction.id),
+        transaction,
+      );
+    },
+  });
+}
+
+/* ============================================================================
+ * Import Stock
+ * ========================================================================== */
+
+export function useImportStock() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: endpoints.importStock,
+
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.stock,
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.dashboard,
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.lowStock,
+      });
+    },
+  });
+}
+
+/* ============================================================================
+ * Business Mutations
+ * ========================================================================== */
+
+export function useBusinessMutations() {
+  const queryClient = useQueryClient();
+
+  const create = useMutation({
+    mutationFn: endpoints.createBusiness,
+
+    onSuccess: (business) => {
+      queryClient.setQueryData(
+        queryKeys.business,
+        business,
+      );
+    },
+  });
+
+  const update = useMutation({
+    mutationFn: ({
+      businessId,
+      input,
+    }: {
+      businessId: string;
+      input: Partial<Business>;
+    }) =>
+      endpoints.updateBusiness(
+        businessId,
+        input,
+      ),
+
+    onSuccess: (business) => {
+      queryClient.setQueryData(
+        queryKeys.business,
+        business,
+      );
+    },
+  });
+
+  return {
+    create,
+    update,
+  };
+}
+
+/* ============================================================================
+ * Convenience Helpers
+ * ========================================================================== */
+
+/**
+ * Signed-in user's display information.
+ *
+ * User information is read from the locally stored login response.
+ */
+export function useProfile() {
+  const user = getStoredUser();
+
+  return {
+    ownerName: user?.name ?? 'Shop owner',
+    email: user?.email ?? '',
+    businessId: user?.business_id ?? null,
+    isActive: user?.is_active ?? false,
+  };
+}
+
+/**
+ * Format a numeric amount as Indian Rupees.
+ */
+export function money(
+  value: number | null | undefined,
+): string {
+  return `₹${Number(value ?? 0).toFixed(2)}`;
+}
+
