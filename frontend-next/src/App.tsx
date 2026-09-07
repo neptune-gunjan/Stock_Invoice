@@ -2823,6 +2823,13 @@ function CustomersPage() {
   const customers = useCustomers();
 
   const [query, setQuery] = useState('');
+  const [customerFilter, setCustomerFilter] = useState<
+    'all' | 'due' | 'paid' | 'limit'
+  >('all');
+
+  const [customerSort, setCustomerSort] = useState<
+    'name' | 'highest_due' | 'lowest_due' | 'newest'
+  >('name');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -2839,14 +2846,103 @@ function CustomersPage() {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
+  const [customerFinancials, setCustomerFinancials] = useState<
+    Record<
+      string,
+      {
+        totalPurchase: number;
+        paidAmount: number;
+        outstanding: number;
+      }
+    >
+  >({});
+
   const customerList = customers.data ?? [];
 
+  /*
+   * Load financial information for every retailer.
+   *
+   * We use the existing customer transactions endpoint,
+   * so no backend change is required.
+   */
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadFinancials = async () => {
+      if (customerList.length === 0) {
+        setCustomerFinancials({});
+        return;
+      }
+
+      const results = await Promise.all(
+        customerList.map(async (customer) => {
+          try {
+            const transactions =
+              await endpoints.customerTransactions(
+                customer.id,
+              );
+
+            const totalPurchase = transactions.reduce(
+              (sum: number, invoice) =>
+                sum + Number(invoice.total_amount || 0),
+              0,
+            );
+
+            const paidAmount = transactions.reduce(
+              (sum: number, invoice) =>
+                sum + Number(invoice.paid_amount || 0),
+              0,
+            );
+
+            const outstanding = transactions.reduce(
+              (sum: number, invoice) =>
+                sum + Number(invoice.remaining_amount || 0),
+              0,
+            );
+            return [
+              customer.id,
+              {
+                totalPurchase,
+                paidAmount,
+                outstanding,
+              },
+            ] as const;
+          } catch {
+            return [
+              customer.id,
+              {
+                totalPurchase: 0,
+                paidAmount: 0,
+                outstanding: 0,
+              },
+            ] as const;
+          }
+        }),
+      );
+
+      if (!cancelled) {
+        setCustomerFinancials(
+          Object.fromEntries(results),
+        );
+      }
+    };
+
+    loadFinancials();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [customerList]);
+
+  /*
+   * Search retailers.
+   */
   const shown = useMemo(() => {
-    const search = query.toLowerCase().trim();
+  const search = query.toLowerCase().trim();
 
-    if (!search) return customerList;
-
-    return customerList.filter((customer) =>
+  const filtered = customerList.filter((customer) => {
+    const matchesSearch =
+      !search ||
       [
         customer.name,
         customer.phone ?? '',
@@ -2856,9 +2952,103 @@ function CustomersPage() {
       ]
         .join(' ')
         .toLowerCase()
-        .includes(search),
+        .includes(search);
+
+    if (!matchesSearch) {
+      return false;
+    }
+
+    const financial =
+      customerFinancials[customer.id] ?? {
+        totalPurchase: 0,
+        paidAmount: 0,
+        outstanding: 0,
+      };
+
+    const outstanding = Number(
+      financial.outstanding || 0,
     );
-  }, [customerList, query]);
+
+    const creditLimit = Number(
+      customer.credit_limit ?? 0,
+    );
+
+    if (
+      customerFilter === 'due' &&
+      outstanding <= 0
+    ) {
+      return false;
+    }
+
+    if (
+      customerFilter === 'paid' &&
+      outstanding > 0
+    ) {
+      return false;
+    }
+
+    if (
+      customerFilter === 'limit' &&
+      (
+        creditLimit <= 0 ||
+        outstanding < creditLimit
+      )
+    ) {
+      return false;
+    }
+
+    return true;
+  });
+
+  return [...filtered].sort((a, b) => {
+    const financialA =
+      customerFinancials[a.id] ?? {
+        totalPurchase: 0,
+        paidAmount: 0,
+        outstanding: 0,
+      };
+
+    const financialB =
+      customerFinancials[b.id] ?? {
+        totalPurchase: 0,
+        paidAmount: 0,
+        outstanding: 0,
+      };
+
+    if (customerSort === 'highest_due') {
+      return (
+        Number(financialB.outstanding || 0) -
+        Number(financialA.outstanding || 0)
+      );
+    }
+
+    if (customerSort === 'lowest_due') {
+      return (
+        Number(financialA.outstanding || 0) -
+        Number(financialB.outstanding || 0)
+      );
+    }
+
+    if (customerSort === 'newest') {
+      return (
+        new Date(b.created_at).getTime() -
+        new Date(a.created_at).getTime()
+      );
+    }
+
+    return a.name.localeCompare(
+      b.name,
+      undefined,
+      { sensitivity: 'base' },
+    );
+  });
+}, [
+  customerList,
+  query,
+  customerFinancials,
+  customerFilter,
+  customerSort,
+]);
 
   const resetForm = () => {
     setForm({
@@ -2885,11 +3075,16 @@ function CustomersPage() {
     setForm({
       name: customer.name ?? '',
       phone: customer.phone ?? '',
-      business_name: customer.business_name ?? '',
+      business_name:
+        customer.business_name ?? '',
       address: customer.address ?? '',
       gst_number: customer.gst_number ?? '',
-      credit_limit: String(customer.credit_limit ?? 0),
-      payment_terms_days: String(customer.payment_terms_days ?? 0),
+      credit_limit: String(
+        customer.credit_limit ?? 0,
+      ),
+      payment_terms_days: String(
+        customer.payment_terms_days ?? 0,
+      ),
     });
 
     setError('');
@@ -2903,24 +3098,43 @@ function CustomersPage() {
     setError('');
   };
 
-  const saveCustomer = async (event: FormEvent) => {
+  const saveCustomer = async (
+    event: FormEvent,
+  ) => {
     event.preventDefault();
 
     if (!form.name.trim()) {
-      setError('Retailer name is required.');
+      setError(
+        'Retailer name is required.',
+      );
       return;
     }
 
-    const creditLimit = Number(form.credit_limit);
-    const paymentTerms = Number(form.payment_terms_days);
+    const creditLimit = Number(
+      form.credit_limit,
+    );
 
-    if (!Number.isFinite(creditLimit) || creditLimit < 0) {
-      setError('Credit limit must be a valid non-negative amount.');
+    const paymentTerms = Number(
+      form.payment_terms_days,
+    );
+
+    if (
+      !Number.isFinite(creditLimit) ||
+      creditLimit < 0
+    ) {
+      setError(
+        'Credit limit must be a valid non-negative amount.',
+      );
       return;
     }
 
-    if (!Number.isInteger(paymentTerms) || paymentTerms < 0) {
-      setError('Payment terms must be a valid number of days.');
+    if (
+      !Number.isInteger(paymentTerms) ||
+      paymentTerms < 0
+    ) {
+      setError(
+        'Payment terms must be a valid number of days.',
+      );
       return;
     }
 
@@ -2931,9 +3145,12 @@ function CustomersPage() {
       const payload = {
         name: form.name.trim(),
         phone: form.phone.trim() || null,
-        business_name: form.business_name.trim() || null,
-        address: form.address.trim() || null,
-        gst_number: form.gst_number.trim() || null,
+        business_name:
+          form.business_name.trim() || null,
+        address:
+          form.address.trim() || null,
+        gst_number:
+          form.gst_number.trim() || null,
         credit_limit: creditLimit,
         payment_terms_days: paymentTerms,
       };
@@ -2943,11 +3160,18 @@ function CustomersPage() {
           payload.name,
           payload.phone || undefined,
           {
-            business_name: payload.business_name ?? undefined,
-            address: payload.address ?? undefined,
-            gst_number: payload.gst_number ?? undefined,
-            credit_limit: payload.credit_limit,
-            payment_terms_days: payload.payment_terms_days,
+            business_name:
+              payload.business_name ??
+              undefined,
+            address:
+              payload.address ?? undefined,
+            gst_number:
+              payload.gst_number ??
+              undefined,
+            credit_limit:
+              payload.credit_limit,
+            payment_terms_days:
+              payload.payment_terms_days,
           },
         );
       } else {
@@ -2961,14 +3185,19 @@ function CustomersPage() {
       closeForm();
     } catch (e) {
       setError(
-        errorMessage(e, 'Could not save retailer.'),
+        errorMessage(
+          e,
+          'Could not save retailer.',
+        ),
       );
     } finally {
       setSaving(false);
     }
   };
 
-  const deleteCustomer = async (customer: Customer) => {
+  const deleteCustomer = async (
+    customer: Customer,
+  ) => {
     if (
       !window.confirm(
         `Delete retailer "${customer.name}"?`,
@@ -2978,8 +3207,13 @@ function CustomersPage() {
     }
 
     try {
-      if ((endpoints as any).deleteCustomer) {
-        await (endpoints as any).deleteCustomer(customer.id);
+      if (
+        (endpoints as any).deleteCustomer
+      ) {
+        await (
+          endpoints as any
+        ).deleteCustomer(customer.id);
+
         await customers.refetch();
       } else {
         setError(
@@ -2988,7 +3222,10 @@ function CustomersPage() {
       }
     } catch (e) {
       setError(
-        errorMessage(e, 'Could not delete retailer.'),
+        errorMessage(
+          e,
+          'Could not delete retailer.',
+        ),
       );
     }
   };
@@ -3022,7 +3259,9 @@ function CustomersPage() {
           <input
             className={`${inputClass} pl-10`}
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) =>
+              setQuery(e.target.value)
+            }
             placeholder="Search retailer, business, phone or GST"
             data-testid="input-search-customers"
           />
@@ -3030,8 +3269,69 @@ function CustomersPage() {
 
         <div className="flex min-h-11 items-center gap-2 rounded-xl border border-border bg-card px-4 text-xs text-muted-foreground">
           <Filter size={15} />
-          {shown.length} of {customerList.length} retailers
+          {shown.length} of {customerList.length}{' '}
+          retailers
         </div>
+      </div>
+
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row">
+        {/* Status filter */}
+        <select
+          value={customerFilter}
+          onChange={(e) =>
+            setCustomerFilter(
+              e.target.value as
+                | 'all'
+                | 'due'
+                | 'paid'
+                | 'limit',
+            )
+          }
+          className={`${inputClass} sm:w-56`}
+          aria-label="Filter retailers"
+        >
+          <option value="all">
+            All retailers
+          </option>
+          <option value="due">
+            Due
+          </option>
+          <option value="paid">
+            Paid
+          </option>
+          <option value="limit">
+            Credit limit reached
+          </option>
+        </select>
+
+        {/* Sort */}
+        <select
+          value={customerSort}
+          onChange={(e) =>
+            setCustomerSort(
+              e.target.value as
+                | 'name'
+                | 'highest_due'
+                | 'lowest_due'
+                | 'newest',
+            )
+          }
+          className={`${inputClass} sm:w-56`}
+          aria-label="Sort retailers"
+        >
+          <option value="name">
+            Name A–Z
+          </option>
+          <option value="highest_due">
+            Highest outstanding
+          </option>
+          <option value="lowest_due">
+            Lowest outstanding
+          </option>
+          <option value="newest">
+            Newest retailer
+          </option>
+        </select>
       </div>
 
       {/* Error */}
@@ -3117,7 +3417,8 @@ function CustomersPage() {
                 onChange={(e) =>
                   setForm({
                     ...form,
-                    business_name: e.target.value,
+                    business_name:
+                      e.target.value,
                   })
                 }
                 placeholder="e.g. Rahul General Store"
@@ -3134,7 +3435,8 @@ function CustomersPage() {
                 onChange={(e) =>
                   setForm({
                     ...form,
-                    gst_number: e.target.value.toUpperCase(),
+                    gst_number:
+                      e.target.value.toUpperCase(),
                   })
                 }
                 placeholder="e.g. 08ABCDE1234F1Z5"
@@ -3171,14 +3473,16 @@ function CustomersPage() {
                 onChange={(e) =>
                   setForm({
                     ...form,
-                    credit_limit: e.target.value,
+                    credit_limit:
+                      e.target.value,
                   })
                 }
                 placeholder="50000"
               />
 
               <span className="mt-1 block text-xs font-normal text-muted-foreground">
-                Maximum outstanding amount allowed for this retailer.
+                Maximum outstanding amount allowed
+                for this retailer.
               </span>
             </label>
 
@@ -3191,18 +3495,22 @@ function CustomersPage() {
                 min="0"
                 step="1"
                 className={`${inputClass} mt-2`}
-                value={form.payment_terms_days}
+                value={
+                  form.payment_terms_days
+                }
                 onChange={(e) =>
                   setForm({
                     ...form,
-                    payment_terms_days: e.target.value,
+                    payment_terms_days:
+                      e.target.value,
                   })
                 }
                 placeholder="30"
               />
 
               <span className="mt-1 block text-xs font-normal text-muted-foreground">
-                Example: 30 means payment is expected within 30 days.
+                Example: 30 means payment is
+                expected within 30 days.
               </span>
             </label>
 
@@ -3252,7 +3560,9 @@ function CustomersPage() {
               customers.error,
               'Could not load retailers.',
             )}
-            onRetry={() => customers.refetch()}
+            onRetry={() =>
+              customers.refetch()
+            }
           />
         </div>
       )}
@@ -3263,102 +3573,187 @@ function CustomersPage() {
         </SectionCard>
       ) : shown.length > 0 ? (
         <SectionCard className="overflow-hidden">
-
           {/* Desktop header */}
-          <div className="hidden grid-cols-[1.5fr_1.1fr_1fr_1fr_100px] gap-4 border-b border-border bg-muted/45 px-5 py-3 mono text-[10px] uppercase tracking-wider text-muted-foreground sm:grid">
+          <div className="hidden grid-cols-[1.5fr_1.1fr_1fr_1fr_1fr_100px] gap-4 border-b border-border bg-muted/45 px-5 py-3 mono text-[10px] uppercase tracking-wider text-muted-foreground sm:grid">
             <span>Retailer</span>
             <span>Business</span>
             <span>Credit limit</span>
+            <span>Outstanding</span>
             <span>Payment terms</span>
             <span />
           </div>
 
           <div className="divide-y divide-border">
-            {shown.map((customer, index) => (
-              <div
-                key={customer.id}
-                className="grid gap-4 px-5 py-5 transition hover:bg-muted/30 sm:grid-cols-[1.5fr_1.1fr_1fr_1fr_100px] sm:items-center"
-                data-testid={`row-customer-${customer.id}`}
-              >
-                {/* Retailer */}
-                <Link
-                  href={`/customers/${customer.id}`}
-                  className="flex min-w-0 items-center gap-3"
-                  data-testid={`link-customer-${customer.id}`}
-                >
-                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary text-sm font-extrabold text-primary-foreground">
-                    {customer.name
-                      ?.trim()
-                      ?.charAt(0)
-                      ?.toUpperCase() || '?'}
-                  </div>
+            {shown.map((customer) => {
+              const financial =
+                customerFinancials[
+                  customer.id
+                ] ?? {
+                  totalPurchase: 0,
+                  paidAmount: 0,
+                  outstanding: 0,
+                };
 
+              const creditLimit = Number(
+                customer.credit_limit ?? 0,
+              );
+
+              const outstanding = Number(
+                financial.outstanding || 0,
+              );
+
+              const creditUtilization =
+                creditLimit > 0
+                  ? Math.min(
+                      (outstanding /
+                        creditLimit) *
+                        100,
+                      100,
+                    )
+                  : 0;
+
+              const paymentStatus =
+                outstanding <= 0
+                  ? {
+                      label: 'Paid',
+                      className:
+                        'text-muted-foreground',
+                    }
+                  : creditLimit > 0 &&
+                      outstanding >=
+                        creditLimit
+                    ? {
+                        label:
+                          'Credit limit reached',
+                        className:
+                          'font-bold text-destructive',
+                      }
+                    : {
+                        label: 'Due',
+                        className:
+                          'font-bold text-foreground',
+                      };
+
+              return (
+                <div
+                  key={customer.id}
+                  className="grid gap-4 px-5 py-5 transition hover:bg-muted/30 sm:grid-cols-[1.5fr_1.1fr_1fr_1fr_1fr_100px] sm:items-center"
+                  data-testid={`row-customer-${customer.id}`}
+                >
+                  {/* Retailer */}
+                  <Link
+                    href={`/customers/${customer.id}`}
+                    className="flex min-w-0 items-center gap-3"
+                    data-testid={`link-customer-${customer.id}`}
+                  >
+                    <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary text-sm font-extrabold text-primary-foreground">
+                      {customer.name
+                        ?.trim()
+                        ?.charAt(0)
+                        ?.toUpperCase() ||
+                        '?'}
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold hover:underline">
+                        {customer.name}
+                      </p>
+
+                      <p className="mt-1 truncate text-xs text-muted-foreground">
+                        {customer.phone ||
+                          'No phone number'}
+                      </p>
+                    </div>
+                  </Link>
+
+                  {/* Business */}
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-bold hover:underline">
-                      {customer.name}
+                    <p className="truncate text-sm font-medium">
+                      {customer.business_name ||
+                        '—'}
                     </p>
 
                     <p className="mt-1 truncate text-xs text-muted-foreground">
-                      {customer.phone || 'No phone number'}
+                      {customer.gst_number ||
+                        'No GST'}
                     </p>
                   </div>
-                </Link>
 
-                {/* Business */}
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">
-                    {customer.business_name || '—'}
-                  </p>
+                  {/* Credit */}
+                  <div>
+                    <p className="text-sm font-bold">
+                      {money(creditLimit)}
+                    </p>
 
-                  <p className="mt-1 truncate text-xs text-muted-foreground">
-                    {customer.gst_number || 'No GST'}
-                  </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Credit limit
+                    </p>
+                  </div>
+
+                  {/* Outstanding */}
+                  <div>
+                    <p className="text-sm font-extrabold">
+                      {money(outstanding)}
+                    </p>
+
+                    <p
+                      className={`mt-1 text-xs ${paymentStatus.className}`}
+                    >
+                      {paymentStatus.label}
+                    </p>
+
+                    {creditLimit > 0 && (
+                      <p className="mt-1 text-[10px] text-muted-foreground">
+                        {creditUtilization.toFixed(
+                          0,
+                        )}
+                        % credit used
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Terms */}
+                  <div>
+                    <p className="text-sm font-bold">
+                      {customer.payment_terms_days ??
+                        0}{' '}
+                      days
+                    </p>
+
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Payment terms
+                    </p>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex gap-1 sm:justify-end">
+                    <button
+                      onClick={() =>
+                        openEdit(customer)
+                      }
+                      className="grid h-10 w-10 place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                      aria-label={`Edit ${customer.name}`}
+                      data-testid={`button-edit-customer-${customer.id}`}
+                    >
+                      <Pencil size={16} />
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        deleteCustomer(
+                          customer,
+                        )
+                      }
+                      className="grid h-10 w-10 place-items-center rounded-lg text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
+                      aria-label={`Delete ${customer.name}`}
+                      data-testid={`button-delete-customer-${customer.id}`}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </div>
-
-                {/* Credit */}
-                <div>
-                  <p className="text-sm font-bold">
-                    {money(customer.credit_limit ?? 0)}
-                  </p>
-
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Credit limit
-                  </p>
-                </div>
-
-                {/* Terms */}
-                <div>
-                  <p className="text-sm font-bold">
-                    {customer.payment_terms_days ?? 0} days
-                  </p>
-
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Payment terms
-                  </p>
-                </div>
-
-                {/* Actions */}
-                <div className="flex gap-1 sm:justify-end">
-                  <button
-                    onClick={() => openEdit(customer)}
-                    className="grid h-10 w-10 place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                    aria-label={`Edit ${customer.name}`}
-                    data-testid={`button-edit-customer-${customer.id}`}
-                  >
-                    <Pencil size={16} />
-                  </button>
-
-                  <button
-                    onClick={() => deleteCustomer(customer)}
-                    className="grid h-10 w-10 place-items-center rounded-lg text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
-                    aria-label={`Delete ${customer.name}`}
-                    data-testid={`button-delete-customer-${customer.id}`}
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </SectionCard>
       ) : (
@@ -3391,7 +3786,6 @@ function CustomersPage() {
     </AppShell>
   );
 }
-
 
 
 function CustomerDetailPage() {
@@ -3459,6 +3853,44 @@ function CustomerDetailPage() {
 
   const availableCredit = Math.max(
     creditLimit - remainingAmount,
+    0,
+  );
+
+  const dueInvoices = customerInvoices.filter(
+    (invoice) =>
+      Number(invoice.remaining_amount || 0) > 0,
+  );
+
+  const overdueInvoices = dueInvoices.filter(
+    (invoice) => {
+      const createdDate = new Date(
+        invoice.created_at,
+      );
+
+      const dueDate = new Date(createdDate);
+
+      dueDate.setDate(
+        dueDate.getDate() +
+          (customer?.payment_terms_days ?? 0),
+      );
+
+      const today = new Date();
+
+      today.setHours(0, 0, 0, 0);
+      dueDate.setHours(0, 0, 0, 0);
+
+      return dueDate.getTime() < today.getTime();
+    },
+  );
+
+  const overdueAmount = overdueInvoices.reduce(
+    (sum, invoice) =>
+      sum + Number(invoice.remaining_amount || 0),
+    0,
+  );
+
+  const currentDueAmount = Math.max(
+    remainingAmount - overdueAmount,
     0,
   );
 
@@ -3869,6 +4301,271 @@ function CustomerDetailPage() {
 
           </div>
 
+        </SectionCard>
+
+        {/* Due overview */}
+        <SectionCard className="mt-7 p-5">
+
+          <div className="mb-5">
+            <p className="mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">
+              Outstanding overview
+            </p>
+
+            <h2 className="mt-1 text-lg font-extrabold">
+              Due management
+            </h2>
+
+            <p className="mt-1 text-xs text-muted-foreground">
+              Track unpaid, overdue, and upcoming retailer dues.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+
+            {/* Total due */}
+            <div className="rounded-xl border border-border bg-muted/20 p-4">
+              <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                Total due
+              </p>
+
+              <p className="mt-3 text-2xl font-extrabold">
+                {money(remainingAmount)}
+              </p>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                All outstanding invoices
+              </p>
+            </div>
+
+            {/* Overdue */}
+            <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4">
+              <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                Overdue
+              </p>
+
+              <p className="mt-3 text-2xl font-extrabold text-destructive">
+                {money(overdueAmount)}
+              </p>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                Past payment terms
+              </p>
+            </div>
+
+            {/* Current due */}
+            <div className="rounded-xl border border-border bg-muted/20 p-4">
+              <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                Current due
+              </p>
+
+              <p className="mt-3 text-2xl font-extrabold">
+                {money(currentDueAmount)}
+              </p>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                Not overdue yet
+              </p>
+            </div>
+
+          </div>
+
+        </SectionCard>
+
+        {/* Invoice-wise due management */}
+        <SectionCard className="mt-7 p-5">
+          <div className="mb-5">
+            <p className="mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">
+              Invoice dues
+            </p>
+
+            <h2 className="mt-1 text-lg font-extrabold">
+              Outstanding invoices
+            </h2>
+
+            <p className="mt-1 text-xs text-muted-foreground">
+              Review unpaid invoices and record retailer payments.
+            </p>
+          </div>
+
+          {dueInvoices.length === 0 ? (
+            <div className="rounded-xl border border-border bg-muted/20 p-6 text-center">
+              <p className="text-sm font-semibold">
+                No outstanding invoices
+              </p>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                This retailer has no pending payment.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {[...dueInvoices]
+                .sort((a, b) => {
+                  const aCreated = new Date(a.created_at).getTime();
+                  const bCreated = new Date(b.created_at).getTime();
+
+                  return aCreated - bCreated;
+                })
+                .map((invoice) => {
+                  const dueStatus = getDueStatus(
+                    invoice.created_at,
+                    customer?.payment_terms_days ?? 0,
+                    Number(invoice.remaining_amount || 0),
+                  );
+
+                  return (
+                    <div
+                      key={invoice.id}
+                      className="rounded-xl border border-border p-4"
+                    >
+                      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-3">
+                            <p className="font-bold">
+                              {invoice.invoice_number}
+                            </p>
+
+                            <span
+                              className={`text-xs ${dueStatus.className}`}
+                            >
+                              {dueStatus.label}
+                            </span>
+                          </div>
+
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {new Date(
+                              invoice.created_at,
+                            ).toLocaleDateString()}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-6">
+                          <div className="text-right">
+                            <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                              Invoice
+                            </p>
+
+                            <p className="mt-1 font-bold">
+                              {money(
+                                Number(
+                                  invoice.total_amount || 0,
+                                ),
+                              )}
+                            </p>
+                          </div>
+
+                          <div className="text-right">
+                            <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                              Outstanding
+                            </p>
+
+                            <p className="mt-1 font-extrabold">
+                              {money(
+                                Number(
+                                  invoice.remaining_amount || 0,
+                                ),
+                              )}
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            className="rounded-lg border border-border px-3 py-2 text-xs font-bold hover:bg-muted"
+                            onClick={() => {
+                              setPaymentInvoice(invoice.id);
+                              setPaymentAmount(
+                                String(
+                                  Number(
+                                    invoice.remaining_amount || 0,
+                                  ),
+                                ),
+                              );
+                              setPaymentMethod('cash');
+                              setPaymentError('');
+                            }}
+                          >
+                            Record payment
+                          </button>
+                        </div>
+                      </div>
+
+                      {paymentInvoice === invoice.id && (
+                        <div className="mt-4 rounded-xl border border-border bg-muted/20 p-4">
+                          <div className="grid gap-3 md:grid-cols-[1fr_180px_auto]">
+                            <input
+                              type="number"
+                              min="0.01"
+                              max={Number(
+                                invoice.remaining_amount || 0,
+                              )}
+                              step="0.01"
+                              value={paymentAmount}
+                              onChange={(event) =>
+                                setPaymentAmount(
+                                  event.target.value,
+                                )
+                              }
+                              placeholder="Payment amount"
+                              className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                            />
+
+                            <select
+                              value={paymentMethod}
+                              onChange={(event) =>
+                                setPaymentMethod(
+                                  event.target.value,
+                                )
+                              }
+                              className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                            >
+                              <option value="cash">
+                                Cash
+                              </option>
+                              <option value="upi">
+                                UPI
+                              </option>
+                              <option value="card">
+                                Card
+                              </option>
+                              <option value="bank_transfer">
+                                Bank transfer
+                              </option>
+                              <option value="credit">
+                                Credit
+                              </option>
+                            </select>
+
+                            <button
+                              type="button"
+                              disabled={paymentSaving}
+                              onClick={() =>
+                                submitRetailerPayment(
+                                  invoice.id,
+                                  Number(
+                                    invoice.remaining_amount || 0,
+                                  ),
+                                )
+                              }
+                              className="rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background disabled:opacity-50"
+                            >
+                              {paymentSaving
+                                ? 'Saving...'
+                                : 'Save payment'}
+                            </button>
+                          </div>
+
+                          {paymentError && (
+                            <p className="mt-3 text-xs font-semibold text-destructive">
+                              {paymentError}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          )}
         </SectionCard>
 
         {/* Last payment */}
