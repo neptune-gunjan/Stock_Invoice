@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -50,3 +50,19 @@ class StockRead(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+class StockMovementRead(BaseModel):
+    id: uuid.UUID
+    stock_id: uuid.UUID
+    movement_type: str
+    quantity: float
+    quantity_before: float
+    quantity_after: float
+    reference_id: Optional[uuid.UUID] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+class StockMovementCreate(BaseModel):
+    movement_type: Literal["purchase", "return", "damage"]
+    quantity: float = Field(gt=0)

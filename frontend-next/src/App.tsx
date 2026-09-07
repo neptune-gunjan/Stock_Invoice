@@ -22,6 +22,8 @@ import {
   Save,
   Store,
   UserPlus,
+  History,
+  PackagePlus,
 } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -43,15 +45,18 @@ import {
   useRecentInvoices,
   useStock,
   useStockMutations,
+  useStockMovements,
   useInvoicePayments,
   useInvoiceMutations,
   useCustomerTransactions,
   Customer,
   useBusiness,
   useBusinessMutations,
+  useImportStock,
   type ExtractedItem,
   type StockInput,
   type StockItem,
+  type StockMovement,
 } from '@/lib/data';
 import './index.css';
 
@@ -1108,6 +1113,7 @@ interface ReviewRow {
 
 const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
+
 function ReviewPage() {
   const [, setLocation] = useLocation();
   const stock = useStock();
@@ -1128,9 +1134,13 @@ function ReviewPage() {
 
   useEffect(() => {
     try {
-      const saved = JSON.parse(sessionStorage.getItem('sia-review') || 'null') as ReviewPayload | null;
+      const saved = JSON.parse(
+        sessionStorage.getItem('sia-review') || 'null',
+      ) as ReviewPayload | null;
+
       if (saved?.items?.length) {
         setJobId(saved.job_id);
+
         setRows(
           saved.items.map((item) => ({
             id: item.id,
@@ -1141,7 +1151,15 @@ function ReviewPage() {
           })),
         );
       } else {
-        setRows([{ id: 'manual-1', raw_text: '', stock_id: null, qty: 1, extracted_item_id: null }]);
+        setRows([
+          {
+            id: 'manual-1',
+            raw_text: '',
+            stock_id: null,
+            qty: 1,
+            extracted_item_id: null,
+          },
+        ]);
       }
     } catch {
       setRows([]);
@@ -1150,14 +1168,20 @@ function ReviewPage() {
 
   const stockById = useMemo(() => {
     const map = new Map<string, StockItem>();
-    (stock.data ?? []).forEach((item) => map.set(item.id, item));
+
+    (stock.data ?? []).forEach((item) => {
+      map.set(item.id, item);
+    });
+
     return map;
   }, [stock.data]);
 
   const filteredCustomers = useMemo(() => {
     const search = customerSearch.trim().toLowerCase();
 
-    if (!search) return customers.data ?? [];
+    if (!search) {
+      return customers.data ?? [];
+    }
 
     return (customers.data ?? []).filter((item) =>
       `${item.name} ${item.phone ?? ''}`
@@ -1166,15 +1190,33 @@ function ReviewPage() {
     );
   }, [customers.data, customerSearch]);
 
-  const priceFor = (row: ReviewRow) => (row.stock_id ? stockById.get(row.stock_id)?.unit_price ?? 0 : 0);
-  const total = rows.reduce((sum, row) => sum + row.qty * priceFor(row), 0);
+  const priceFor = (row: ReviewRow) =>
+    row.stock_id
+      ? stockById.get(row.stock_id)?.unit_price ?? 0
+      : 0;
+
+  const total = rows.reduce(
+    (sum, row) => sum + row.qty * priceFor(row),
+    0,
+  );
 
   const update = (id: string, patch: Partial<ReviewRow>) =>
-    setRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+    setRows((current) =>
+      current.map((row) =>
+        row.id === id ? { ...row, ...patch } : row,
+      ),
+    );
+
   const addRow = () =>
     setRows((current) => [
       ...current,
-      { id: `manual-${Date.now()}`, raw_text: '', stock_id: null, qty: 1, extracted_item_id: null },
+      {
+        id: `manual-${Date.now()}`,
+        raw_text: '',
+        stock_id: null,
+        qty: 1,
+        extracted_item_id: null,
+      },
     ]);
 
   const selectCustomer = (item: Customer) => {
@@ -1194,6 +1236,7 @@ function ReviewPage() {
       name: '',
       phone: '',
     });
+
     setCustomerSearch('');
   };
 
@@ -1204,12 +1247,39 @@ function ReviewPage() {
     }
 
     if (rows.some((row) => !row.stock_id)) {
-      setError('Choose a catalog item for every row before confirming.');
+      setError(
+        'Choose a catalog item for every row before confirming.',
+      );
       return;
     }
 
     if (rows.some((row) => !row.qty || row.qty <= 0)) {
-      setError('Quantity must be greater than 0 on every row.');
+      setError(
+        'Quantity must be greater than 0 on every row.',
+      );
+      return;
+    }
+
+    /*
+     * Check stock availability before sending the request.
+     * This gives the user a friendly message instead of
+     * waiting for the backend 409 response.
+     */
+    const shortageRow = rows.find((row) => {
+      const item = row.stock_id
+        ? stockById.get(row.stock_id)
+        : undefined;
+
+      return !!item && row.qty > item.quantity_available;
+    });
+
+    if (shortageRow) {
+      const item = stockById.get(shortageRow.stock_id!);
+
+      setError(
+        `${item?.name ?? 'Product'}: ${shortageRow.qty} requested, but only ${item?.quantity_available ?? 0} available. Reduce the quantity or use the available amount.`,
+      );
+
       return;
     }
 
@@ -1220,18 +1290,12 @@ function ReviewPage() {
       let customerId: string | null = customer.id;
 
       /*
-      * Existing customer selected:
-      * --------------------------------
-      * customer.id already contains the
-      * database customer ID, so don't create
-      * another customer.
-      *
-      * New customer:
-      * --------------------------------
-      * customer.id is null, but name exists,
-      * so create the customer once and use
-      * the returned ID.
-      */
+       * Existing customer:
+       * Use the existing customer ID.
+       *
+       * New customer:
+       * Create it once and use the returned ID.
+       */
       if (!customerId && customer.name.trim()) {
         const created = await endpoints.createCustomer(
           customer.name.trim(),
@@ -1242,12 +1306,16 @@ function ReviewPage() {
       }
 
       const transaction = await endpoints.confirm({
-        extraction_job_id: jobId && isUuid(jobId) ? jobId : null,
+        extraction_job_id:
+          jobId && isUuid(jobId) ? jobId : null,
+
         customer_id: customerId,
+
         items: rows.map((row) => ({
           stock_id: row.stock_id as string,
           qty: row.qty,
-          extracted_item_id: row.extracted_item_id ?? undefined,
+          extracted_item_id:
+            row.extracted_item_id ?? undefined,
         })),
       });
 
@@ -1255,7 +1323,9 @@ function ReviewPage() {
 
       setLocation(`/invoice/${transaction.invoice_id}`);
     } catch (e) {
-      setError(errorMessage(e, 'Could not confirm the invoice.'));
+      setError(
+        errorMessage(e, 'Could not confirm the invoice.'),
+      );
     } finally {
       setSaving(false);
     }
@@ -1264,6 +1334,11 @@ function ReviewPage() {
   return (
     <AppShell>
       <div className="mx-auto max-w-5xl">
+
+        {/* -----------------------------------------------------------
+         * Header
+         * --------------------------------------------------------- */}
+
         <div className="mb-7 flex items-center gap-3">
           <Link
             href="/upload"
@@ -1272,32 +1347,62 @@ function ReviewPage() {
           >
             <ArrowLeft size={17} />
           </Link>
+
           <div>
-            <p className="mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">Step 2 of 3</p>
-            <p className="text-sm font-bold">Check the details</p>
+            <p className="mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">
+              Step 2 of 3
+            </p>
+
+            <p className="text-sm font-bold">
+              Check the details
+            </p>
           </div>
         </div>
+
         <PageHeading
           eyebrow="Human review"
           title="Does this look right?"
           description="Prices come from your catalog. Check the highlighted rows and pick a match before confirming."
           action={
-            <button onClick={addRow} className={buttonQuiet} data-testid="button-add-review-item">
-              <Plus size={17} /> Add item
+            <button
+              onClick={addRow}
+              className={buttonQuiet}
+              data-testid="button-add-review-item"
+            >
+              <Plus size={17} />
+              Add item
             </button>
           }
         />
+
+        {/* -----------------------------------------------------------
+         * Errors
+         * --------------------------------------------------------- */}
+
         {stock.isError && (
           <div className="mb-5">
-            <ErrorNotice message={errorMessage(stock.error, 'Could not load your catalog.')} onRetry={() => stock.refetch()} />
+            <ErrorNotice
+              message={errorMessage(
+                stock.error,
+                'Could not load your catalog.',
+              )}
+              onRetry={() => stock.refetch()}
+            />
           </div>
         )}
+
         {error && (
           <div className="mb-5">
             <ErrorNotice message={error} />
           </div>
         )}
+
+        {/* -----------------------------------------------------------
+         * Review Items
+         * --------------------------------------------------------- */}
+
         <SectionCard className="overflow-hidden">
+
           <div className="hidden grid-cols-[1.1fr_1.4fr_.55fr_.7fr_.8fr_40px] gap-3 border-b border-border bg-muted/45 px-5 py-3 mono text-[10px] uppercase tracking-wider text-muted-foreground md:grid">
             <span>Written as</span>
             <span>Catalog match</span>
@@ -1306,90 +1411,256 @@ function ReviewPage() {
             <span className="text-right">Line total</span>
             <span />
           </div>
+
           <div className="divide-y divide-border">
+
             {rows.map((row, index) => {
-              const stockItem = row.stock_id ? stockById.get(row.stock_id) : undefined;
+              const stockItem = row.stock_id
+                ? stockById.get(row.stock_id)
+                : undefined;
+
               const needsReview = !row.stock_id;
+
+              const available =
+                stockItem?.quantity_available ?? 0;
+
+              const shortage = Math.max(
+                row.qty - available,
+                0,
+              );
+
+              const hasShortage =
+                !!stockItem && shortage > 0;
+
               return (
                 <div
                   key={row.id}
                   className={`grid gap-4 px-4 py-5 md:grid-cols-[1.1fr_1.4fr_.55fr_.7fr_.8fr_40px] md:items-center md:gap-3 md:px-5 ${
-                    needsReview ? 'bg-secondary/10' : ''
+                    needsReview
+                      ? 'bg-secondary/10'
+                      : ''
                   }`}
                   data-testid={`row-review-${row.id}`}
                 >
+
+                  {/* Written item */}
+
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="mono text-[10px] text-muted-foreground">0{index + 1}</span>
+
+                      <span className="mono text-[10px] text-muted-foreground">
+                        0{index + 1}
+                      </span>
+
                       <input
                         className={`${inputClass} !min-h-9`}
                         value={row.raw_text}
-                        onChange={(e) => update(row.id, { raw_text: e.target.value })}
+                        onChange={(e) =>
+                          update(row.id, {
+                            raw_text: e.target.value,
+                          })
+                        }
                         placeholder="item"
                         data-testid={`input-review-rawtext-${row.id}`}
                       />
+
                       {needsReview && (
                         <span className="rounded-full bg-secondary px-2 py-1 text-[9px] font-extrabold uppercase text-primary">
                           Check
                         </span>
                       )}
+
                     </div>
                   </div>
+
+                  {/* Catalog match */}
+
                   <select
-                    className={`${inputClass} ${needsReview ? 'border-secondary-foreground/50' : ''}`}
+                    className={`${inputClass} ${
+                      needsReview
+                        ? 'border-secondary-foreground/50'
+                        : ''
+                    }`}
                     value={row.stock_id || ''}
-                    onChange={(e) => update(row.id, { stock_id: e.target.value || null })}
+                    onChange={(e) =>
+                      update(row.id, {
+                        stock_id:
+                          e.target.value || null,
+                      })
+                    }
                     data-testid={`select-review-item-${row.id}`}
                   >
-                    <option value="">Select catalog item</option>
+                    <option value="">
+                      Select catalog item
+                    </option>
+
                     {(stock.data ?? []).map((item) => (
-                      <option key={item.id} value={item.id}>
+                      <option
+                        key={item.id}
+                        value={item.id}
+                      >
                         {item.name} · {money(item.unit_price)}
                       </option>
                     ))}
                   </select>
+
+                  {/* Quantity */}
+
                   <input
                     type="number"
                     min="1"
                     step="1"
-                    className={inputClass}
+                    className={`${inputClass} ${
+                      hasShortage
+                        ? 'border-amber-400 focus:border-amber-500'
+                        : ''
+                    }`}
                     value={row.qty}
-                    onChange={(e) => update(row.id, { qty: Number(e.target.value) })}
+                    onChange={(e) =>
+                      update(row.id, {
+                        qty: Number(e.target.value),
+                      })
+                    }
                     data-testid={`input-review-quantity-${row.id}`}
                   />
+
+                  {/* Rate */}
+
                   <span className="hidden text-sm text-muted-foreground md:block">
-                    {stockItem ? `${money(stockItem.unit_price)}/${stockItem.unit}` : '—'}
+                    {stockItem
+                      ? `${money(stockItem.unit_price)}/${stockItem.unit}`
+                      : '—'}
                   </span>
-                  <span className="mono text-sm font-medium md:text-right">{money(row.qty * priceFor(row))}</span>
+
+                  {/* Partial availability warning */}
+
+                  {hasShortage && (
+                    <div className="md:col-span-5 rounded-xl border border-amber-300 bg-amber-50 px-3 py-3 dark:border-amber-700 dark:bg-amber-950/30">
+
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+
+                        <div className="flex items-start gap-2">
+
+                          <span className="mt-0.5 text-amber-600">
+                            ⚠
+                          </span>
+
+                          <div className="text-xs">
+
+                            <p className="font-bold text-amber-800 dark:text-amber-300">
+                              Partial availability
+                            </p>
+
+                            <p className="mt-0.5 text-amber-700 dark:text-amber-400">
+                              Requested{' '}
+                              <strong>{row.qty}</strong>{' '}
+                              {stockItem?.unit}
+                              {' · '}
+                              Available{' '}
+                              <strong>{available}</strong>{' '}
+                              {stockItem?.unit}
+                              {' · '}
+                              Short{' '}
+                              <strong>{shortage}</strong>
+                            </p>
+
+                          </div>
+
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            update(row.id, {
+                              qty: available,
+                            })
+                          }
+                          className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-900/50"
+                        >
+                          Use {available}
+                        </button>
+
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Line total */}
+
+                  <span className="mono text-sm font-medium md:text-right">
+                    {money(
+                      row.qty * priceFor(row),
+                    )}
+                  </span>
+
+                  {/* Delete */}
+
                   <button
-                    onClick={() => setRows((current) => current.filter((r) => r.id !== row.id))}
+                    type="button"
+                    onClick={() =>
+                      setRows((current) =>
+                        current.filter(
+                          (r) => r.id !== row.id,
+                        ),
+                      )
+                    }
                     className="grid h-10 w-10 place-items-center rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                    aria-label={`Delete ${row.raw_text || 'row'}`}
+                    aria-label={`Delete ${
+                      row.raw_text || 'row'
+                    }`}
                     data-testid={`button-delete-review-${row.id}`}
                   >
                     <Trash2 size={16} />
                   </button>
+
                 </div>
               );
             })}
+
           </div>
+
+          {/* Total */}
+
           <div className="flex flex-col gap-4 border-t border-border bg-muted/30 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
+
             <p className="text-xs text-muted-foreground">
-              <strong className="text-foreground">{rows.length} lines</strong> · Tax and discounts are not applied
+              <strong className="text-foreground">
+                {rows.length} lines
+              </strong>{' '}
+              · Tax and discounts are not applied
             </p>
+
             <div className="flex items-center justify-between gap-8 sm:justify-end">
-              <span className="text-sm font-bold">Total</span>
-              <span className="mono text-2xl font-medium">{money(total)}</span>
+              <span className="text-sm font-bold">
+                Total
+              </span>
+
+              <span className="mono text-2xl font-medium">
+                {money(total)}
+              </span>
             </div>
+
           </div>
+
         </SectionCard>
+
+        {/* -----------------------------------------------------------
+         * Customer
+         * --------------------------------------------------------- */}
+
         <SectionCard className="mt-6 p-5">
+
           <div className="mb-4">
+
             <div className="flex items-center justify-between gap-3">
+
               <div>
                 <p className="text-sm font-bold">
-                  Customer <span className="font-normal text-muted-foreground">(optional)</span>
+                  Customer{' '}
+                  <span className="font-normal text-muted-foreground">
+                    (optional)
+                  </span>
                 </p>
+
                 <p className="mt-1 text-xs text-muted-foreground">
                   Select an existing customer or enter a new one.
                 </p>
@@ -1404,16 +1675,23 @@ function ReviewPage() {
                   Clear
                 </button>
               )}
+
             </div>
+
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
+
+            {/* Customer search */}
+
             <div className="relative">
+
               <label className="text-sm font-bold">
                 Search customer
               </label>
 
               <div className="relative mt-2">
+
                 <Search
                   size={16}
                   className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
@@ -1422,9 +1700,14 @@ function ReviewPage() {
                 <input
                   className={`${inputClass} pl-9`}
                   value={customerSearch}
-                  onFocus={() => setShowCustomerResults(true)}
+                  onFocus={() =>
+                    setShowCustomerResults(true)
+                  }
                   onChange={(e) => {
-                    setCustomerSearch(e.target.value);
+                    setCustomerSearch(
+                      e.target.value,
+                    );
+
                     setShowCustomerResults(true);
 
                     if (customer.id) {
@@ -1438,46 +1721,60 @@ function ReviewPage() {
                   placeholder="Search name or phone"
                   data-testid="input-customer-search"
                 />
+
               </div>
 
-              {showCustomerResults && customerSearch.trim() && (
-                <div className="absolute left-0 right-0 z-20 mt-2 max-h-56 overflow-auto rounded-xl border border-border bg-card p-1 shadow-lg">
-                  {customers.isLoading ? (
-                    <div className="px-3 py-4 text-xs text-muted-foreground">
-                      Loading customers…
-                    </div>
-                  ) : filteredCustomers.length > 0 ? (
-                    filteredCustomers.map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => selectCustomer(item)}
-                        className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left hover:bg-muted"
-                      >
-                        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary text-xs font-bold text-primary-foreground">
-                          {item.name.charAt(0).toUpperCase()}
-                        </div>
+              {showCustomerResults &&
+                customerSearch.trim() && (
+                  <div className="absolute left-0 right-0 z-20 mt-2 max-h-56 overflow-auto rounded-xl border border-border bg-card p-1 shadow-lg">
 
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold">
-                            {item.name}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {item.phone || 'No phone number'}
-                          </p>
-                        </div>
-                      </button>
-                    ))
-                  ) : (
-                    <div className="px-3 py-4 text-xs text-muted-foreground">
-                      No matching customer found.
-                    </div>
-                  )}
-                </div>
-              )}
+                    {customers.isLoading ? (
+                      <div className="px-3 py-4 text-xs text-muted-foreground">
+                        Loading customers…
+                      </div>
+                    ) : filteredCustomers.length > 0 ? (
+                      filteredCustomers.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() =>
+                            selectCustomer(item)
+                          }
+                          className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left hover:bg-muted"
+                        >
+                          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary text-xs font-bold text-primary-foreground">
+                            {item.name
+                              .charAt(0)
+                              .toUpperCase()}
+                          </div>
+
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold">
+                              {item.name}
+                            </p>
+
+                            <p className="text-xs text-muted-foreground">
+                              {item.phone ||
+                                'No phone number'}
+                            </p>
+                          </div>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-3 py-4 text-xs text-muted-foreground">
+                        No matching customer found.
+                      </div>
+                    )}
+
+                  </div>
+                )}
+
             </div>
 
+            {/* Customer name */}
+
             <div>
+
               <label className="text-sm font-bold">
                 Customer name
               </label>
@@ -1495,11 +1792,18 @@ function ReviewPage() {
                 placeholder="Walk-in customer"
                 data-testid="input-customer-name"
               />
+
             </div>
 
+            {/* Phone */}
+
             <div>
+
               <label className="text-sm font-bold">
-                Phone <span className="font-normal text-muted-foreground">(optional)</span>
+                Phone{' '}
+                <span className="font-normal text-muted-foreground">
+                  (optional)
+                </span>
               </label>
 
               <input
@@ -1514,15 +1818,21 @@ function ReviewPage() {
                 placeholder="For their receipt"
                 data-testid="input-customer-phone"
               />
+
             </div>
 
+            {/* Customer status */}
+
             <div className="flex items-end">
-              {!customer.id && customer.name.trim() && (
-                <div className="flex min-h-11 w-full items-center gap-2 rounded-xl border border-border bg-muted/40 px-4 text-xs text-muted-foreground">
-                  <UserPlus size={15} />
-                  New customer details will be used for this invoice.
-                </div>
-              )}
+
+              {!customer.id &&
+                customer.name.trim() && (
+                  <div className="flex min-h-11 w-full items-center gap-2 rounded-xl border border-border bg-muted/40 px-4 text-xs text-muted-foreground">
+                    <UserPlus size={15} />
+                    New customer details will be used
+                    for this invoice.
+                  </div>
+                )}
 
               {customer.id && (
                 <div className="flex min-h-11 w-full items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 text-xs text-emerald-700 dark:text-emerald-400">
@@ -1530,11 +1840,17 @@ function ReviewPage() {
                   Existing customer selected
                 </div>
               )}
+
             </div>
+
           </div>
 
+          {/* Confirm */}
+
           <div className="mt-5 flex justify-end">
+
             <button
+              type="button"
               onClick={confirm}
               disabled={saving || !rows.length}
               className={`${buttonPrimary} sm:min-w-[190px]`}
@@ -1542,7 +1858,10 @@ function ReviewPage() {
             >
               {saving ? (
                 <>
-                  <Loader2 className="animate-spin" size={16} />
+                  <Loader2
+                    className="animate-spin"
+                    size={16}
+                  />
                   Saving…
                 </>
               ) : (
@@ -1552,8 +1871,11 @@ function ReviewPage() {
                 </>
               )}
             </button>
+
           </div>
+
         </SectionCard>
+
       </div>
     </AppShell>
   );
@@ -1775,7 +2097,18 @@ const blankForm = { name: '', sku: '', unit: '', unit_price: '', quantity_availa
 
 function CatalogPage() {
   const stock = useStock();
-  const { create, update, remove } = useStockMutations();
+  const { create, update, remove, movement } = useStockMutations();
+
+  const [historyItem, setHistoryItem] = useState<StockItem | null>(null);
+
+  const movements = useStockMovements(historyItem?.id ?? null);
+  const [movementItem, setMovementItem] = useState<StockItem | null>(null);
+  const [movementType, setMovementType] = useState<
+    'purchase' | 'return' | 'damage'
+  >('purchase');
+  const [movementQty, setMovementQty] = useState('');
+  const [movementError, setMovementError] = useState('');
+
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState(blankForm);
@@ -1848,6 +2181,59 @@ function CatalogPage() {
     }
   };
 
+  const submitMovement = async (event: FormEvent) => {
+    event.preventDefault();
+
+    setMovementError('');
+
+    const quantity = Number(movementQty);
+
+    if (!movementItem) {
+      return setMovementError('Please select a product.');
+    }
+
+    if (
+      movementQty.trim() === '' ||
+      Number.isNaN(quantity) ||
+      quantity <= 0
+    ) {
+      return setMovementError(
+        'Quantity must be greater than 0.',
+      );
+    }
+
+    if (
+      movementType === 'damage' &&
+      quantity > movementItem.quantity_available
+    ) {
+      return setMovementError(
+        `${movementItem.name} has only ${movementItem.quantity_available} ${movementItem.unit} available.`,
+      );
+    }
+
+    try {
+      await movement.mutateAsync({
+        id: movementItem.id,
+        input: {
+          movement_type: movementType,
+          quantity,
+        },
+      });
+
+      setMovementItem(null);
+      setMovementQty('');
+      setMovementType('purchase');
+      setMovementError('');
+    } catch (e) {
+      setMovementError(
+        errorMessage(
+          e,
+          'Could not apply stock movement.',
+        ),
+      );
+    }
+  };
+
   return (
     <AppShell>
       <PageHeading
@@ -1855,9 +2241,25 @@ function CatalogPage() {
         title="Know what’s on the shelf."
         description="Your catalog keeps suggestions grounded in the way you actually sell things."
         action={
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => {
+                const firstItem = items[0];
+
+                setMovementItem(firstItem ?? null);
+                setMovementType('purchase');
+                setMovementQty('');
+                setMovementError('');
+              }}
+              className={buttonQuiet}
+              type="button"
+            >
+              <PackagePlus size={17} /> Stock movement
+            </button>
           <button onClick={() => begin()} className={buttonPrimary} data-testid="button-add-catalog-item">
             <Plus size={17} /> Add item
           </button>
+        </div>
         }
       />
       <div className="mb-5 flex flex-col gap-3 sm:flex-row">
@@ -2021,6 +2423,15 @@ function CatalogPage() {
                   </span>
                   <div className="flex gap-1 sm:justify-end">
                     <button
+                      onClick={() => setHistoryItem(item)}
+                      className="grid h-10 w-10 place-items-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+                      aria-label={`View history for ${item.name}`}
+                      data-testid={`button-history-catalog-${item.id}`}
+                      title="Movement history"
+                    >
+                      <History size={16} />
+                    </button>
+                    <button
                       onClick={() => begin(item)}
                       className="grid h-10 w-10 place-items-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
                       aria-label={`Edit ${item.name}`}
@@ -2055,6 +2466,349 @@ function CatalogPage() {
           />
         </SectionCard>
       )}
+      {historyItem && (
+  <div
+    className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+    onMouseDown={(e) => {
+      if (e.target === e.currentTarget) {
+        setHistoryItem(null);
+      }
+    }}
+  >
+    <div className="max-h-[85vh] w-full max-w-3xl overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
+      <div className="flex items-center justify-between border-b border-border px-5 py-4">
+        <div>
+          <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            Stock movement history
+          </p>
+          <h2 className="mt-1 text-lg font-extrabold">
+            {historyItem.name}
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Current stock: {historyItem.quantity_available} {historyItem.unit}
+          </p>
+        </div>
+
+        <button
+          onClick={() => setHistoryItem(null)}
+          className="grid h-9 w-9 place-items-center rounded-lg hover:bg-muted"
+          aria-label="Close movement history"
+        >
+          <X size={18} />
+        </button>
+      </div>
+
+      <div className="max-h-[65vh] overflow-y-auto p-5">
+        {movements.isLoading ? (
+          <Loading />
+        ) : movements.isError ? (
+          <ErrorNotice
+            message={errorMessage(
+              movements.error,
+              'Could not load movement history.',
+            )}
+            onRetry={() => movements.refetch()}
+          />
+        ) : (movements.data ?? []).length === 0 ? (
+          <EmptyState
+            title="No movement history"
+            body="Stock movements for this product will appear here."
+          />
+        ) : (
+          <div className="space-y-3">
+            {[...(movements.data ?? [])]
+              .reverse()
+              .map((movement) => {
+                const incoming =
+                  movement.movement_type === 'purchase' ||
+                  movement.movement_type === 'return' ||
+                  movement.movement_type === 'sale_reversal';
+
+                const labels: Record<string, string> = {
+                  purchase: 'Purchase',
+                  sale: 'Sale',
+                  return: 'Return',
+                  damage: 'Damage',
+                  adjustment: 'Adjustment',
+                  sale_reversal: 'Sale Reversal',
+                };
+
+                const label =
+                  labels[movement.movement_type] ??
+                  movement.movement_type;
+
+                const date = new Date(movement.created_at);
+
+                return (
+                  <div
+                    key={movement.id}
+                    className="rounded-xl border border-border bg-background p-4"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide ${
+                              incoming
+                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                : 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
+                            }`}
+                          >
+                            {label}
+                          </span>
+
+                          <span className="text-xs text-muted-foreground">
+                            {date.toLocaleDateString()} ·{' '}
+                            {date.toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 flex items-center gap-2">
+                          <span className="mono text-sm text-muted-foreground">
+                            {movement.quantity_before} {historyItem.unit}
+                          </span>
+
+                          <span className="text-muted-foreground">
+                            →
+                          </span>
+
+                          <span className="mono text-sm font-bold">
+                            {movement.quantity_after} {historyItem.unit}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div
+                        className={`mono text-sm font-extrabold ${
+                          incoming
+                            ? 'text-emerald-600'
+                            : 'text-rose-600'
+                        }`}
+                      >
+                        {incoming ? '+' : '-'}
+                        {movement.quantity} {historyItem.unit}
+                      </div>
+                    </div>
+
+                    {movement.reference_id && (
+                      <div className="mt-3 border-t border-border pt-3">
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                          Reference
+                        </span>
+                        <p className="mono mt-1 break-all text-[11px] text-muted-foreground">
+                          {movement.reference_id}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+        )}
+      </div>
+
+      <div className="flex justify-end border-t border-border px-5 py-4">
+        <button
+          onClick={() => setHistoryItem(null)}
+          className={buttonQuiet}
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{movementItem !== null && (
+  <div
+    className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+    onMouseDown={(e) => {
+      if (e.target === e.currentTarget && !movement.isPending) {
+        setMovementItem(null);
+      }
+    }}
+  >
+    <div className="w-full max-w-lg rounded-2xl border border-border bg-card shadow-2xl">
+      <div className="flex items-center justify-between border-b border-border px-5 py-4">
+        <div>
+          <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            Stock movement
+          </p>
+          <h2 className="mt-1 text-lg font-extrabold">
+            Update stock
+          </h2>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            if (!movement.isPending) {
+              setMovementItem(null);
+            }
+          }}
+          className="grid h-9 w-9 place-items-center rounded-lg hover:bg-muted"
+          aria-label="Close stock movement"
+        >
+          <X size={18} />
+        </button>
+      </div>
+
+      <form onSubmit={submitMovement} className="space-y-5 p-5">
+        <label className="block text-xs font-bold">
+          Product
+          <select
+            className={`${inputClass} mt-2`}
+            value={movementItem.id}
+            onChange={(e) => {
+              const selected = items.find(
+                (item) => item.id === e.target.value,
+              );
+
+              if (selected) {
+                setMovementItem(selected);
+              }
+
+              setMovementError('');
+            }}
+            disabled={movement.isPending}
+          >
+            {items.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name} — {item.quantity_available} {item.unit}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block text-xs font-bold">
+            Movement type
+            <select
+              className={`${inputClass} mt-2`}
+              value={movementType}
+              onChange={(e) => {
+                setMovementType(
+                  e.target.value as
+                    | 'purchase'
+                    | 'return'
+                    | 'damage',
+                );
+                setMovementError('');
+              }}
+              disabled={movement.isPending}
+            >
+              <option value="purchase">
+                Purchase
+              </option>
+              <option value="return">
+                Return
+              </option>
+              <option value="damage">
+                Damage
+              </option>
+            </select>
+          </label>
+
+          <label className="block text-xs font-bold">
+            Quantity
+            <input
+              type="number"
+              min="0.01"
+              step="0.01"
+              className={`${inputClass} mt-2`}
+              value={movementQty}
+              onChange={(e) => {
+                setMovementQty(e.target.value);
+                setMovementError('');
+              }}
+              placeholder="e.g. 10"
+              disabled={movement.isPending}
+              autoFocus
+            />
+          </label>
+        </div>
+
+        <div className="rounded-xl border border-border bg-muted/30 p-4">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">
+              Current stock
+            </span>
+
+            <span className="mono font-bold">
+              {movementItem.quantity_available}{' '}
+              {movementItem.unit}
+            </span>
+          </div>
+
+          <div className="mt-2 flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">
+              After movement
+            </span>
+
+            <span className="mono font-bold">
+              {(() => {
+                const quantity = Number(movementQty) || 0;
+
+                const result =
+                  movementType === 'purchase' ||
+                  movementType === 'return'
+                    ? movementItem.quantity_available +
+                      quantity
+                    : movementItem.quantity_available -
+                      quantity;
+
+                return `${result} ${movementItem.unit}`;
+              })()}
+            </span>
+          </div>
+        </div>
+
+        {movementType === 'damage' && (
+          <p className="text-xs text-muted-foreground">
+            Damaged quantity will be removed from available stock.
+          </p>
+        )}
+
+        {(movementType === 'purchase' ||
+          movementType === 'return') && (
+          <p className="text-xs text-muted-foreground">
+            This quantity will be added to available stock.
+          </p>
+        )}
+
+        {movementError && (
+          <ErrorNotice message={movementError} />
+        )}
+
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setMovementItem(null)}
+            className={buttonQuiet}
+            disabled={movement.isPending}
+          >
+            Cancel
+          </button>
+
+          <button
+            type="submit"
+            className={buttonPrimary}
+            disabled={movement.isPending}
+          >
+            <Check size={16} />
+
+            {movement.isPending
+              ? 'Applying...'
+              : 'Apply movement'}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+)}
     </AppShell>
   );
 }
@@ -3086,6 +3840,7 @@ function PaymentPanel({
 function BusinessPage() {
   const business = useBusiness();
   const { create, update } = useBusinessMutations();
+  const importStock = useImportStock();
 
   const [form, setForm] = useState({
     business_name: '',
@@ -3097,6 +3852,9 @@ function BusinessPage() {
 
   // const [initialized, setInitialized] = useState(false);
   const [success, setSuccess] = useState('');
+  const [stockFile, setStockFile] = useState<File | null>(null);
+  const [stockImportSuccess, setStockImportSuccess] = useState('');
+  const [stockImportError, setStockImportError] = useState('');
 
   useEffect(() => {
     if (!business.data) return;
@@ -3147,6 +3905,32 @@ function BusinessPage() {
       }
     } catch (error) {
       console.error('Business save failed:', error);
+    }
+  };
+
+  const handleStockImport = async () => {
+    if (!stockFile) {
+      setStockImportError('Please select a CSV or XLSX file.');
+      return;
+    }
+
+    setStockImportError('');
+    setStockImportSuccess('');
+
+    try {
+      await importStock.mutateAsync(stockFile);
+
+      setStockImportSuccess(
+        'Stock imported successfully for this business.',
+      );
+      setStockFile(null);
+    } catch (error) {
+      setStockImportError(
+        errorMessage(
+          error,
+          'Could not import stock.',
+        ),
+      );
     }
   };
 
@@ -3347,6 +4131,82 @@ function BusinessPage() {
                   : 'Create business'}
             </button>
           </div>
+          {business.data?.id && (
+              <div className="mt-8 border-t border-border pt-8">
+                <div className="mb-5">
+                  <p className="text-sm font-bold">
+                    Import initial stock
+                  </p>
+
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Upload a CSV or XLSX file to add your opening stock
+                    for this business.
+                  </p>
+                </div>
+
+                {stockImportSuccess && (
+                  <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+                    {stockImportSuccess}
+                  </div>
+                )}
+
+                {stockImportError && (
+                  <div className="mb-4">
+                    <ErrorNotice message={stockImportError} />
+                  </div>
+                )}
+
+                <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-5">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold">
+                        Stock file
+                      </p>
+
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Supported formats: CSV, XLSX
+                      </p>
+                    </div>
+
+                    <input
+                      type="file"
+                      accept=".csv,.xlsx"
+                      onChange={(event) => {
+                        setStockFile(
+                          event.target.files?.[0] ?? null,
+                        );
+                        setStockImportError('');
+                        setStockImportSuccess('');
+                      }}
+                      className="block w-full text-sm md:max-w-sm"
+                    />
+                  </div>
+
+                  {stockFile && (
+                    <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-sm text-muted-foreground">
+                        Selected: <span className="font-semibold text-foreground">
+                          {stockFile.name}
+                        </span>
+                      </p>
+
+                      <button
+                        type="button"
+                        onClick={handleStockImport}
+                        disabled={importStock.isPending}
+                        className={buttonPrimary}
+                      >
+                        <PackagePlus size={17} />
+
+                        {importStock.isPending
+                          ? 'Importing...'
+                          : 'Import stock'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
         </form>
       </div>
     </AppShell>

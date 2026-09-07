@@ -15,7 +15,7 @@ from fastapi import (
 
 from app.dependencies import get_current_user, get_stock_service
 from app.models.user import User
-from app.schemas.stock import StockCreate, StockRead, StockUpdate
+from app.schemas.stock import (StockCreate, StockRead, StockUpdate, StockMovementCreate, StockMovementRead,)
 from app.services.stock_service import StockNotFoundError, StockService
 from app.schemas.stock_import import StockImportResult
 
@@ -109,6 +109,61 @@ async def import_stock(
         )
 
     except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    
+
+@router.get(
+    "/{item_id}/movements",
+    response_model=list[StockMovementRead],
+)
+def list_stock_movements(
+    item_id: uuid.UUID,
+    service: StockService = Depends(get_stock_service),
+    current_user: User = Depends(get_current_user),
+) -> list[StockMovementRead]:
+
+    try:
+        return service.list_movements(
+            item_id=item_id,
+            business_id=current_user.business_id,
+        )
+
+    except StockNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{item_id}/movement",
+    response_model=StockRead,
+)
+def create_stock_movement(
+    item_id: uuid.UUID,
+    payload: StockMovementCreate,
+    service: StockService = Depends(get_stock_service),
+    current_user: User = Depends(get_current_user),
+) -> StockRead:
+
+    try:
+        return service.apply_movement(
+            item_id=item_id,
+            movement_type=payload.movement_type,
+            quantity=payload.quantity,
+            business_id=current_user.business_id,
+        )
+
+    except StockNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),

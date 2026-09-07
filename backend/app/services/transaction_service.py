@@ -31,10 +31,20 @@ from app.models.invoice import Invoice
 from app.repositories.invoice import InvoiceRepository
 
 class InsufficientStockError(Exception):
-    def __init__(self, stock_id: uuid.UUID, requested: float, available: float) -> None:
+    def __init__(
+        self,
+        stock_id: uuid.UUID,
+        product_name: str,
+        requested: float,
+        available: float,
+    ) -> None:
         self.stock_id = stock_id
+        self.product_name = product_name
+        self.requested = requested
+        self.available = available
+
         super().__init__(
-            f"stock item {stock_id} has {available} available, but {requested} were requested"
+            f"{product_name} has {available:g} available, but {requested:g} were requested"
         )
 
 
@@ -75,7 +85,12 @@ class TransactionService:
             if stock_item is None:
                 raise StockNotFoundError(line.stock_id)
             if stock_item.quantity_available < line.qty:
-                raise InsufficientStockError(line.stock_id, line.qty, stock_item.quantity_available)
+                raise InsufficientStockError(
+                    line.stock_id,
+                    stock_item.name,
+                    line.qty,
+                    stock_item.quantity_available,
+                )
             resolved.append((stock_item, line.qty))
 
         subtotal = sum(
@@ -135,11 +150,9 @@ class TransactionService:
             quantity_before = stock_item.quantity_available
             quantity_after = quantity_before - qty
 
-            self._stock_service.update_stock(
+            self._stock_service.update_stock_quantity_without_movement(
                 stock_item.id,
-                StockUpdate(
-                    quantity_available=quantity_after
-                ),
+                quantity_after=quantity_after,
                 business_id=business_id,
             )
 

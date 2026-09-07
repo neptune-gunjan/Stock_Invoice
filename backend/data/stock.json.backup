@@ -1,0 +1,504 @@
+[
+  {
+    "id": "e3f4e039-733f-4b08-995f-e49f3620734b",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Atta",
+    "sku": null,
+    "aliases": [
+      "aata",
+      "flour",
+      "atta"
+    ],
+    "unit": "kg",
+    "unit_price": 45.0,
+    "quantity_available": 106.0,
+    "low_stock_threshold": 0.0,
+    "created_at": "2026-07-28T10:52:00.999875Z",
+    "updated_at": "2026-09-05T18:41:42.115383Z",
+    "deleted_at": null
+  },
+  {
+    "id": "43a42ec8-5914-4413-bd5a-a11037abd8ca",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Rice",
+    "sku": null,
+    "aliases": [
+      "chawal"
+    ],
+    "unit": "kg",
+    "unit_price": 60.0,
+    "quantity_available": 192.0,
+    "low_stock_threshold": 0.0,
+    "created_at": "2026-07-28T10:52:01.056622Z",
+    "updated_at": "2026-09-05T18:41:43.604357Z",
+    "deleted_at": null
+  },
+  {
+    "id": "4df99eb1-8b34-462c-88b8-aa0879626383",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Toor Dal",
+    "sku": null,
+    "aliases": [
+      "arhar dal",
+      "tuwar dal"
+    ],
+    "unit": "kg",
+    "unit_price": 110.0,
+    "quantity_available": 54.0,
+    "low_stock_threshold": 0.0,
+    "created_at": "2026-07-28T10:52:01.097635Z",
+    "updated_at": "2026-09-05T18:41:43.671594Z",
+    "deleted_at": null
+  },
+  {
+    "id": "c5e36ccd-7f70-497a-baaf-c9050c30e5c5",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Moong Dal",
+    "sku": null,
+    "aliases": [
+      "moong"
+    ],
+    "unit": "kg",
+    "unit_price": 105.0,
+    "quantity_available": 48.0,
+    "low_stock_threshold": 0.0,
+    "created_at": "2026-07-28T10:52:01.157122Z",
+    "updated_at": "2026-09-01T10:12:18.483774Z",
+    "deleted_at": null
+  },
+  {
+    "id": "758c6323-5fbe-49c0-b8d4-476c0081e814",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Chana Dal",
+    "sku": null,
+    "aliases": [
+      "chana"
+    ],
+    "unit": "kg",
+    "unit_price": 90.0,
+    "quantity_available": 44.0,
+    "low_stock_threshold": 0.0,
+    "created_at": "2026-07-28T10:52:01.205108Z",
+    "updated_at": "2026-09-04T20:46:01.863129Z",
+    "deleted_at": null
+  },
+  {
+    "id": "84123c0a-fdc0-47da-80a1-5a3dafdfb79d",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Salt",
+    "sku": null,
+    "aliases": [
+      "namak"
+    ],
+    "unit": "kg",
+    "unit_price": 20.0,
+    "quantity_available": 100.0,
+    "low_stock_threshold": 0.0,
+    "created_at": "2026-07-28T10:52:01.231451Z",
+    "updated_at": "2026-07-28T10:52:01.231451Z",
+    "deleted_at": null
+  },
+  {
+    "id": "275c9e81-f9e1-4df9-9839-96aea714f6dd",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Tea Leaves",
+    "sku": null,
+    "aliases": [
+      "chai patti",
+      "chai"
+    ],
+    "unit": "kg",
+    "unit_price": 320.0,
+    "quantity_available": 30.0,
+    "low_stock_threshold": 0.0,
+    "created_at": "2026-07-28T10:52:01.326562Z",
+    "updated_at": "2026-07-28T10:52:01.326562Z",
+    "deleted_at": null
+  },
+  {
+    "id": "8c2117fe-d46a-402e-b79c-27295635574a",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Milk",
+    "sku": null,
+    "aliases": [
+      "doodh"
+    ],
+    "unit": "litre",
+    "unit_price": 55.0,
+    "quantity_available": 60.0,
+    "low_stock_threshold": 0.0,
+    "created_at": "2026-07-28T10:52:01.357912Z",
+    "updated_at": "2026-07-28T10:52:01.357912Z",
+    "deleted_at": null
+  },
+  {
+    "id": "2c416d94-abcf-4e9c-a9e7-ebf08b5a40e6",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Ghee",
+    "sku": null,
+    "aliases": [
+      "desi ghee"
+    ],
+    "unit": "kg",
+    "unit_price": 540.0,
+    "quantity_available": 20.0,
+    "low_stock_threshold": 0.0,
+    "created_at": "2026-07-28T10:52:01.389737Z",
+    "updated_at": "2026-07-28T10:52:01.389737Z",
+    "deleted_at": null
+  },
+  {
+    "id": "29bb9d9a-55cb-4150-9b65-4eca2b9d6fc5",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Bread",
+    "sku": null,
+    "aliases": [
+      "pav",
+      "double roti"
+    ],
+    "unit": "piece",
+    "unit_price": 45.0,
+    "quantity_available": 40.0,
+    "low_stock_threshold": 0.0,
+    "created_at": "2026-07-28T10:52:01.415690Z",
+    "updated_at": "2026-07-28T10:52:01.415690Z",
+    "deleted_at": null
+  },
+  {
+    "id": "f9f3fa4f-b794-4b24-8cb4-04c247a29f67",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Eggs",
+    "sku": null,
+    "aliases": [
+      "anda"
+    ],
+    "unit": "dozen",
+    "unit_price": 75.0,
+    "quantity_available": 30.0,
+    "low_stock_threshold": 0.0,
+    "created_at": "2026-07-28T10:52:01.441593Z",
+    "updated_at": "2026-09-05T19:11:36.434774Z",
+    "deleted_at": null
+  },
+  {
+    "id": "42294fc2-ab24-4c53-8b23-ece3411bba65",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Potato",
+    "sku": null,
+    "aliases": [
+      "aloo"
+    ],
+    "unit": "kg",
+    "unit_price": 25.0,
+    "quantity_available": 150.0,
+    "low_stock_threshold": 0.0,
+    "created_at": "2026-07-28T10:52:01.469270Z",
+    "updated_at": "2026-07-28T10:52:01.469270Z",
+    "deleted_at": null
+  },
+  {
+    "id": "bc8e3b82-dd8f-49d1-b67b-68bb34a20e5c",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Onion",
+    "sku": null,
+    "aliases": [
+      "pyaz"
+    ],
+    "unit": "kg",
+    "unit_price": 30.0,
+    "quantity_available": 150.0,
+    "low_stock_threshold": 0.0,
+    "created_at": "2026-07-28T10:52:01.494927Z",
+    "updated_at": "2026-07-28T10:52:01.494927Z",
+    "deleted_at": null
+  },
+  {
+    "id": "8d96b94b-6073-4198-a8e4-e86460037093",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Tomato",
+    "sku": null,
+    "aliases": [
+      "tamatar"
+    ],
+    "unit": "kg",
+    "unit_price": 35.0,
+    "quantity_available": 100.0,
+    "low_stock_threshold": 0.0,
+    "created_at": "2026-07-28T10:52:01.523673Z",
+    "updated_at": "2026-07-28T10:52:01.523673Z",
+    "deleted_at": null
+  },
+  {
+    "id": "be978631-29bb-42dd-98ce-1aa1ad997174",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Soap",
+    "sku": null,
+    "aliases": [
+      "sabun"
+    ],
+    "unit": "piece",
+    "unit_price": 35.0,
+    "quantity_available": 80.0,
+    "low_stock_threshold": 0.0,
+    "created_at": "2026-07-28T10:52:01.550100Z",
+    "updated_at": "2026-07-28T10:52:01.550100Z",
+    "deleted_at": null
+  },
+  {
+    "id": "90455268-f5e0-4203-9597-882bfa8cb5d1",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Detergent Powder",
+    "sku": null,
+    "aliases": [
+      "surf",
+      "washing powder"
+    ],
+    "unit": "kg",
+    "unit_price": 120.0,
+    "quantity_available": 45.0,
+    "low_stock_threshold": 0.0,
+    "created_at": "2026-07-28T10:52:01.592473Z",
+    "updated_at": "2026-07-28T10:52:01.592473Z",
+    "deleted_at": null
+  },
+  {
+    "id": "0014ef5c-7dcd-4acd-ab88-8a6f12af5616",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Sugar",
+    "sku": null,
+    "aliases": [
+      "shakkar",
+      "cheeni"
+    ],
+    "unit": "kg",
+    "unit_price": 42.0,
+    "quantity_available": 80.0,
+    "low_stock_threshold": 0.0,
+    "created_at": "2026-08-11T15:47:25.976470Z",
+    "updated_at": "2026-08-11T15:47:25.976474Z",
+    "deleted_at": null
+  },
+  {
+    "id": "c64e97bd-fc98-49e1-8575-7179664cf365",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Cooking Oil",
+    "sku": null,
+    "aliases": [
+      "tel",
+      "oil",
+      "refined oil"
+    ],
+    "unit": "litre",
+    "unit_price": 150.0,
+    "quantity_available": 32.0,
+    "low_stock_threshold": 0.0,
+    "created_at": "2026-08-11T15:47:26.003429Z",
+    "updated_at": "2026-09-04T20:46:01.794516Z",
+    "deleted_at": null
+  },
+  {
+    "id": "ad1ae010-6edb-4c92-9e85-fc6c13e777b1",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Turmeric Powder",
+    "sku": null,
+    "aliases": [
+      "haldi"
+    ],
+    "unit": "kg",
+    "unit_price": 180.0,
+    "quantity_available": 25.0,
+    "low_stock_threshold": 0.0,
+    "created_at": "2026-08-11T15:47:26.148253Z",
+    "updated_at": "2026-08-11T15:47:26.148257Z",
+    "deleted_at": null
+  },
+  {
+    "id": "44597f80-d950-4d97-9704-1637b62cd98d",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Red Chilli Powder",
+    "sku": null,
+    "aliases": [
+      "mirchi",
+      "lal mirch"
+    ],
+    "unit": "kg",
+    "unit_price": 220.0,
+    "quantity_available": 25.0,
+    "low_stock_threshold": 0.0,
+    "created_at": "2026-08-11T15:47:26.175985Z",
+    "updated_at": "2026-08-11T15:47:26.175989Z",
+    "deleted_at": null
+  },
+  {
+    "id": "1f4bc88c-1dba-49a8-a17a-7f3379038325",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Eggs",
+    "sku": null,
+    "aliases": [
+      "anda"
+    ],
+    "unit": "dozen",
+    "unit_price": 75.0,
+    "quantity_available": 35.0,
+    "low_stock_threshold": 0.0,
+    "created_at": "2026-08-11T15:47:26.284914Z",
+    "updated_at": "2026-08-11T15:47:26.284918Z",
+    "deleted_at": null
+  },
+  {
+    "id": "8f8e2e0c-46d9-4566-8afd-4833fd690f0b",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Biscuit",
+    "sku": null,
+    "aliases": [
+      "biscuit",
+      "biscuits",
+      "cookie",
+      "cookies"
+    ],
+    "unit": "piece",
+    "unit_price": 10.0,
+    "quantity_available": 78.0,
+    "low_stock_threshold": 0.0,
+    "created_at": "2026-08-12T17:28:58.031807Z",
+    "updated_at": "2026-09-05T18:41:43.747129Z",
+    "deleted_at": null
+  },
+  {
+    "id": "fd03f1e7-3646-4882-8279-089c5b4ec509",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Chocolate",
+    "sku": null,
+    "aliases": [
+      "chocolate",
+      "choco"
+    ],
+    "unit": "piece",
+    "unit_price": 30.0,
+    "quantity_available": 71.0,
+    "low_stock_threshold": 0.0,
+    "created_at": "2026-08-12T17:29:07.992239Z",
+    "updated_at": "2026-09-05T18:41:43.819685Z",
+    "deleted_at": null
+  },
+  {
+    "id": "47225c64-076a-4843-b6d8-5aa0eadd2fe9",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Test Biscuit",
+    "sku": "TEST001",
+    "aliases": [
+      "biscuit",
+      "test biscuit"
+    ],
+    "unit": "piece",
+    "unit_price": 15.0,
+    "quantity_available": 50.0,
+    "low_stock_threshold": 10.0,
+    "created_at": "2026-09-02T08:40:27.764842Z",
+    "updated_at": "2026-09-02T11:06:34.443486Z",
+    "deleted_at": "2026-09-02T11:06:34.443486Z"
+  },
+  {
+    "id": "a66fd002-0aa7-49a5-aad2-fff00ae37550",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Test Oil",
+    "sku": "TEST002",
+    "aliases": [
+      "oil",
+      "cooking oil"
+    ],
+    "unit": "litre",
+    "unit_price": 140.0,
+    "quantity_available": 0.0,
+    "low_stock_threshold": 5.0,
+    "created_at": "2026-09-02T08:40:27.804166Z",
+    "updated_at": "2026-09-05T18:41:43.503631Z",
+    "deleted_at": null
+  },
+  {
+    "id": "3c0a0f90-499a-4195-896f-3369a8e2ec4e",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Test Sugar",
+    "sku": "TEST003",
+    "aliases": [
+      "sugar",
+      "cheeni"
+    ],
+    "unit": "kg",
+    "unit_price": 42.0,
+    "quantity_available": 30.0,
+    "low_stock_threshold": 5.0,
+    "created_at": "2026-09-02T08:40:27.912414Z",
+    "updated_at": "2026-09-02T08:40:27.912418Z",
+    "deleted_at": null
+  },
+  {
+    "id": "a1fafe48-ddae-4685-b1ca-408c711ecdeb",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Test Rice",
+    "sku": "TEST004",
+    "aliases": [
+      "rice",
+      "chawal"
+    ],
+    "unit": "kg",
+    "unit_price": 60.0,
+    "quantity_available": 100.0,
+    "low_stock_threshold": 10.0,
+    "created_at": "2026-09-02T09:05:11.801707Z",
+    "updated_at": "2026-09-02T09:05:11.801715Z",
+    "deleted_at": null
+  },
+  {
+    "id": "3ada1374-810d-4aab-89d6-90ae9227175d",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Test Milk",
+    "sku": "TEST005",
+    "aliases": [
+      "milk",
+      "doodh"
+    ],
+    "unit": "litre",
+    "unit_price": 55.0,
+    "quantity_available": 50.0,
+    "low_stock_threshold": 5.0,
+    "created_at": "2026-09-02T09:05:12.048495Z",
+    "updated_at": "2026-09-02T09:05:12.048499Z",
+    "deleted_at": null
+  },
+  {
+    "id": "9b337dcc-971b-4055-89c8-3080e956fcf9",
+    "business_id": "03ff797c-2fc7-421a-9b33-8dd5c5dee789",
+    "name": "Test Soap",
+    "sku": "TEST006",
+    "aliases": [
+      "soap",
+      "sabun"
+    ],
+    "unit": "piece",
+    "unit_price": 35.0,
+    "quantity_available": 30.0,
+    "low_stock_threshold": 5.0,
+    "created_at": "2026-09-02T09:05:12.077442Z",
+    "updated_at": "2026-09-02T09:05:12.077446Z",
+    "deleted_at": null
+  },
+  {
+    "id": "491af471-c120-47e2-9b57-9f03420c5f9a",
+    "business_id": "e396211a-7423-4e5c-9af2-1ddb5d1f36cb",
+    "name": "Basmati rice",
+    "sku": "RICE-001",
+    "aliases": [
+      "rice",
+      "chawal",
+      "basmati"
+    ],
+    "unit": "kg",
+    "unit_price": 120.0,
+    "quantity_available": 50.0,
+    "low_stock_threshold": 10.0,
+    "created_at": "2026-09-03T18:44:59.714650Z",
+    "updated_at": "2026-09-03T18:44:59.714827Z",
+    "deleted_at": null
+  }
+]

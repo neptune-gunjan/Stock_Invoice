@@ -17,12 +17,25 @@ from app.schemas.stock_import import (
     StockImportError,
     StockImportResult,
 )
+from app.models.stock_movement import StockMovement
+from app.repositories.stock_movement import StockMovementRepository
 
 
 class StockNotFoundError(Exception):
-    def __init__(self, item_id: uuid.UUID) -> None:
+    def __init__(
+        self,
+        item_id: uuid.UUID,
+        product_name: str | None = None,
+    ) -> None:
         self.item_id = item_id
-        super().__init__(f"stock item {item_id} not found")
+        self.product_name = product_name
+
+        if product_name:
+            message = f"{product_name} not found"
+        else:
+            message = "Requested product was not found"
+
+        super().__init__(message)
 
 
 def _clean_aliases(aliases: list[str]) -> list[str]:
@@ -37,8 +50,13 @@ def _clean_aliases(aliases: list[str]) -> list[str]:
 
 class StockService:
 
-    def __init__(self, repository: StockRepository) -> None:
+    def __init__(
+        self,
+        repository: StockRepository,
+        stock_movement_repository: StockMovementRepository,
+    ) -> None:
         self._repository = repository
+        self._stock_movement_repository = stock_movement_repository
 
     def list_stock(
         self,
@@ -126,9 +144,61 @@ class StockService:
                 updates["aliases"]
             )
 
+        quantity_changed = (
+            "quantity_available" in updates
+            and updates["quantity_available"] != existing.quantity_available
+        )
+
+        quantity_before = existing.quantity_available
+
         updated = existing.model_copy(
             update={
                 **updates,
+                "updated_at": utcnow(),
+            }
+        )
+
+        saved = self._repository.update(updated)
+
+        if quantity_changed:
+            self._stock_movement_repository.add(
+                StockMovement(
+                    stock_id=existing.id,
+                    movement_type="adjustment",
+                    quantity=(
+                        saved.quantity_available
+                        - quantity_before
+                    ),
+                    quantity_before=quantity_before,
+                    quantity_after=saved.quantity_available,
+                    reference_id=None,
+                )
+            )
+
+        return saved
+
+    def update_stock_quantity_without_movement(
+        self,
+        item_id: uuid.UUID,
+        quantity_after: float,
+        business_id: uuid.UUID,
+    ) -> StockItem:
+
+        existing = self._repository.get(item_id)
+
+        if (
+            existing is None
+            or not existing.is_active
+            or existing.business_id != business_id
+        ):
+            raise StockNotFoundError(item_id)
+
+        if quantity_after < 0:
+            raise ValueError("stock quantity cannot be negative")
+
+        updated = existing.model_copy(
+            update={
+                "quantity_available": quantity_after,
                 "updated_at": utcnow(),
             }
         )
@@ -151,6 +221,67 @@ class StockService:
             raise StockNotFoundError(item_id)
 
         self._repository.soft_delete(item_id)
+
+    def apply_movement(
+        self,
+        item_id: uuid.UUID,
+        movement_type: str,
+        quantity: float,
+        business_id: uuid.UUID,
+    ) -> StockItem:
+
+        existing = self._repository.get(item_id)
+
+        if (
+            existing is None
+            or not existing.is_active
+            or existing.business_id != business_id
+        ):
+            raise StockNotFoundError(item_id)
+
+        if quantity <= 0:
+            raise ValueError("quantity must be greater than 0")
+
+        quantity_before = existing.quantity_available
+
+        if movement_type in {"purchase", "return"}:
+            quantity_after = quantity_before + quantity
+
+        elif movement_type == "damage":
+            if quantity > quantity_before:
+                raise ValueError(
+                    f"{existing.name} has only "
+                    f"{quantity_before:g} available"
+                )
+
+            quantity_after = quantity_before - quantity
+
+        else:
+            raise ValueError(
+                "Unsupported stock movement type"
+            )
+
+        updated = existing.model_copy(
+            update={
+                "quantity_available": quantity_after,
+                "updated_at": utcnow(),
+            }
+        )
+
+        saved = self._repository.update(updated)
+
+        self._stock_movement_repository.add(
+            StockMovement(
+                stock_id=existing.id,
+                movement_type=movement_type,
+                quantity=quantity,
+                quantity_before=quantity_before,
+                quantity_after=quantity_after,
+                reference_id=None,
+            )
+        )
+
+        return saved
 
     def import_csv(
         self,
@@ -681,6 +812,7 @@ class StockService:
         item_id: uuid.UUID,
         quantity: float,
         business_id: uuid.UUID,
+        reference_id: uuid.UUID | None = None,
     ) -> tuple[StockItem, float, float]:
         """
         Restore stock quantity when a sale/invoice is cancelled.
@@ -698,6 +830,9 @@ class StockService:
         ):
             raise StockNotFoundError(item_id)
 
+        if quantity <= 0:
+            raise ValueError("quantity must be greater than 0")
+
         quantity_before = existing.quantity_available
         quantity_after = quantity_before + quantity
 
@@ -710,4 +845,33 @@ class StockService:
 
         self._repository.update(updated)
 
+        self._stock_movement_repository.add(
+            StockMovement(
+                stock_id=existing.id,
+                movement_type="sale_reversal",
+                quantity=quantity,
+                quantity_before=quantity_before,
+                quantity_after=quantity_after,
+                reference_id=reference_id,
+            )
+        )
+
         return updated, quantity_before, quantity_after
+
+    def list_movements(
+        self,
+        item_id: uuid.UUID,
+        business_id: uuid.UUID,
+    ) -> list[StockMovement]:
+
+        existing = self._repository.get(item_id)
+
+        if (
+            existing is None
+            or existing.business_id != business_id
+        ):
+            raise StockNotFoundError(item_id)
+
+        return self._stock_movement_repository.list_by_stock(
+            item_id
+        )

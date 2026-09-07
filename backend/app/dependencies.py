@@ -101,9 +101,14 @@ def get_stock_service(
     repository: StockRepository = Depends(
         get_stock_repository
     ),
+    stock_movement_repository: StockMovementRepository = Depends(
+        get_stock_movement_repository
+    ),
 ) -> StockService:
-    return StockService(repository)
-
+    return StockService(
+        repository,
+        stock_movement_repository,
+    )
 
 # ============================================================
 # Customer

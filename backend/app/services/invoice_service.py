@@ -25,7 +25,6 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app.config import Settings
 from app.models.invoice import Invoice
-from app.models.stock_movement import StockMovement
 from app.repositories.business import BusinessRepository
 from app.repositories.invoice import InvoiceRepository
 from app.repositories.payment import PaymentRepository
@@ -410,7 +409,9 @@ class InvoiceService:
         transaction, items = transaction_result
 
         # ---------------------------------------------------------
-        # STEP 1: PRE-VALIDATE ALL STOCK ITEMS
+        # 4. PRE-VALIDATE ALL STOCK ITEMS
+        #
+        # No stock is modified until every item is validated.
         # ---------------------------------------------------------
 
         stock_items = []
@@ -429,57 +430,22 @@ class InvoiceService:
             )
 
         # ---------------------------------------------------------
-        # STEP 2: PRE-BUILD / VALIDATE ALL REVERSAL MOVEMENTS
+        # 5. RESTORE STOCK
         #
-        # IMPORTANT:
-        # No stock has been modified yet.
-        # If StockMovement validation fails, cancellation stops safely.
+        # restore_stock_for_cancellation() also records
+        # the sale_reversal movement.
         # ---------------------------------------------------------
-
-        reversal_movements = []
 
         for item, stock_item in stock_items:
-
-            quantity_before = stock_item.quantity_available
-            quantity_after = (
-                quantity_before + item.qty
-            )
-
-            reversal_movements.append(
-                StockMovement(
-                    stock_id=item.stock_id,
-                    movement_type="sale_reversal",
-                    quantity=item.qty,
-                    quantity_before=quantity_before,
-                    quantity_after=quantity_after,
-                    reference_id=transaction.id,
-                )
-            )
-
-        # ---------------------------------------------------------
-        # STEP 3: RESTORE STOCK
-        # ---------------------------------------------------------
-        
-        for item, stock_item in stock_items:
-
-        
             self._stock_service.restore_stock_for_cancellation(
                 item.stock_id,
                 item.qty,
                 business_id,
+                reference_id=transaction.id,
             )
 
-            # -----------------------------------------------------
-            # Record stock reversal
-            # -----------------------------------------------------
-
-            for movement in reversal_movements:
-                self._stock_movement_repository.add(
-                    movement
-                )
-
         # ---------------------------------------------------------
-        # STEP 3: CANCEL INVOICE
+        # 6. CANCEL INVOICE
         # ---------------------------------------------------------
 
         invoice.status = "cancelled"

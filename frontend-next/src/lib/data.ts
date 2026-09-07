@@ -42,6 +42,22 @@ export interface StockInput {
   aliases?: string[];
 }
 
+export type StockMovement = {
+  id: string;
+  stock_id: string;
+  movement_type:
+    | 'purchase'
+    | 'sale'
+    | 'adjustment'
+    | 'return'
+    | 'damage'
+    | 'sale_reversal';
+  quantity: number;
+  quantity_before: number;
+  quantity_after: number;
+  reference_id: string | null;
+  created_at: string;
+};
 export interface ExtractedItem {
   id: string;
   extraction_job_id: string;
@@ -236,6 +252,21 @@ export const endpoints = {
   listStock: () =>
     apiJson<StockItem[]>('/stock'),
 
+  listStockMovements: (id: string) =>
+    apiJson<StockMovement[]>(`/stock/${id}/movements`),
+
+  createStockMovement: (
+    id: string,
+    input: {
+      movement_type: 'purchase' | 'return' | 'damage';
+      quantity: number;
+    },
+  ) =>
+    apiJson<StockItem>(`/stock/${id}/movement`, {
+      method: 'POST',
+      body: input,
+    }),
+
   createStock: (input: StockInput) =>
     apiJson<StockItem>('/stock', {
       method: 'POST',
@@ -404,6 +435,9 @@ export const endpoints = {
 export const queryKeys = {
   stock: ['stock'] as const,
 
+  stockMovements: (id: string) =>
+    ['stock', id, 'movements'] as const,
+
   invoices: ['invoices'] as const,
 
   invoice: (id: string) =>
@@ -451,6 +485,14 @@ export function useStock(
     queryKey: queryKeys.stock,
     queryFn: endpoints.listStock,
     ...options,
+  });
+}
+
+export function useStockMovements(stockId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.stockMovements(stockId ?? ''),
+    queryFn: () => endpoints.listStockMovements(stockId!),
+    enabled: Boolean(stockId),
   });
 }
 
@@ -640,10 +682,42 @@ export function useStockMutations() {
     onSuccess: invalidateStock,
   });
 
+  const movement = useMutation({
+    mutationFn: ({
+      id,
+      input,
+    }: {
+      id: string;
+      input: {
+        movement_type: 'purchase' | 'return' | 'damage';
+        quantity: number;
+      };
+    }) => endpoints.createStockMovement(id, input),
+
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.stock,
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.stockMovements(variables.id),
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.dashboard,
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.lowStock,
+      });
+    },
+  });
+
   return {
     create,
     update,
     remove,
+    movement,
   };
 }
 
