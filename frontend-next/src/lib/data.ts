@@ -217,6 +217,7 @@ export interface Business {
   email: string | null;
   address: string | null;
   gst_number: string | null;
+  upi_vpa: string | null;
   invoice_prefix: string;
   logo_path: string | null;
   is_active: boolean;

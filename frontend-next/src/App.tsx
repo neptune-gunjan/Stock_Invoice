@@ -3138,6 +3138,7 @@ function BusinessPage() {
     email: '',
     address: '',
     gst_number: '',
+    upi_vpa: '',
   });
 
   // const [initialized, setInitialized] = useState(false);
@@ -3152,6 +3153,7 @@ function BusinessPage() {
       email: business.data.email ?? '',
       address: business.data.address ?? '',
       gst_number: business.data.gst_number ?? '',
+      upi_vpa: business.data.upi_vpa ?? '',
     });
   }, [business.data]);
 
@@ -3175,6 +3177,7 @@ function BusinessPage() {
             email: form.email.trim() || null,
             address: form.address.trim() || null,
             gst_number: form.gst_number.trim() || null,
+            upi_vpa: form.upi_vpa.trim() || null,
           },
         });
 
@@ -3186,6 +3189,7 @@ function BusinessPage() {
           email: form.email.trim() || null,
           address: form.address.trim() || null,
           gst_number: form.gst_number.trim() || null,
+          upi_vpa: form.upi_vpa.trim() || null,
         });
 
         setSuccess('Business created successfully.');
@@ -3375,6 +3379,28 @@ function BusinessPage() {
                 placeholder="Enter GSTIN"
                 className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm uppercase outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
               />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold">
+                UPI ID
+              </label>
+
+              <input
+                type="text"
+                value={form.upi_vpa}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    upi_vpa: event.target.value,
+                  }))
+                }
+                placeholder="yourshop@upi"
+                className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
+              />
+              <p className="mt-2 text-xs text-muted-foreground">
+                Used to generate the payment link sent alongside invoices over WhatsApp.
+              </p>
             </div>
           </div>
 
