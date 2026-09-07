@@ -184,6 +184,13 @@ export interface InvoiceDetail extends Invoice {
   remaining_amount: number;
 }
 
+export interface WhatsAppSendResult {
+  document_sent: boolean;
+  payment_link_sent: boolean;
+  upi_link: string | null;
+  whatsapp_configured: boolean;
+}
+
 export interface Customer {
   id: string;
   name: string;
@@ -246,6 +253,7 @@ export interface Business {
   email: string | null;
   address: string | null;
   gst_number: string | null;
+  upi_vpa: string | null;
   invoice_prefix: string;
   logo_path: string | null;
   is_active: boolean;
@@ -361,6 +369,11 @@ export const endpoints = {
 
   invoicePdf: (id: string) =>
     apiBlob(`/invoices/${id}/pdf`),
+
+  sendInvoiceWhatsapp: (id: string) =>
+    apiJson<WhatsAppSendResult>(`/invoices/${id}/send-whatsapp`, {
+      method: 'POST',
+    }),
 
   cancelInvoice: (invoiceId: string) =>
     apiJson<Invoice>(`/invoices/${invoiceId}/cancel`, {

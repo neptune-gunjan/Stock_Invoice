@@ -63,6 +63,7 @@ class BusinessService:
             email=data.email,
             address=data.address,
             gst_number=data.gst_number,
+            upi_vpa=data.upi_vpa,
             invoice_prefix=data.invoice_prefix,
             logo_path=data.logo_path,
 

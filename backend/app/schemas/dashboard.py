@@ -34,7 +34,7 @@ class RecentInvoiceRead(BaseModel):
 class LowStockProductRead(BaseModel):
     id: str
     name: str
-    sku: str
+    sku: str | None = None
     unit: str
     quantity_available: float
     low_stock_threshold: float

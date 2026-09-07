@@ -17,6 +17,8 @@ class BusinessCreate(BaseModel):
     address: Optional[str] = Field(default=None, max_length=500)
     gst_number: Optional[str] = Field(default=None, max_length=15)
 
+    upi_vpa: Optional[str] = Field(default=None, max_length=100)
+
     invoice_prefix: str = Field(
         default="INV",
         min_length=1,
@@ -55,6 +57,11 @@ class BusinessUpdate(BaseModel):
         max_length=15
     )
 
+    upi_vpa: Optional[str] = Field(
+        default=None,
+        max_length=100
+    )
+
     invoice_prefix: Optional[str] = Field(
         default=None,
         min_length=1,
@@ -75,6 +82,8 @@ class BusinessResponse(BaseModel):
 
     address: Optional[str] = None
     gst_number: Optional[str] = None
+
+    upi_vpa: Optional[str] = None
 
     invoice_prefix: str
     logo_path: Optional[str] = None

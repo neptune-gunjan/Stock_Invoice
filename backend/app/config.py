@@ -49,10 +49,6 @@ class Settings(BaseSettings):
     user_storage_backend: str = "json_file"
     user_data_file: Path = Path("data/users.json")
 
-    jwt_secret_key: str = "CHANGE_THIS_IN_ENV"
-    jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 60
-
     business_storage_backend: str = "json_file"
     business_data_file: Path = Path("data/business.json")
 
@@ -74,10 +70,17 @@ class Settings(BaseSettings):
     # app/services/invoice_renderers/factory.py.
     invoice_renderer: str = "xhtml2pdf"
 
-    # Authentication
+    # Authentication. Override jwt_secret_key via env in real deployments.
+    # No refresh flow, so expiry = full session length (default 7 days).
     jwt_secret_key: str = "change-this-secret-key-in-production"
     jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 60
+    access_token_expire_minutes: int = 60 * 24 * 7
+
+    # WhatsApp Cloud API (Meta). Left unset -> WhatsAppClient logs instead of
+    # sending, so the send-invoice flow stays testable without real access.
+    whatsapp_access_token: Optional[str] = None
+    whatsapp_phone_number_id: Optional[str] = None
+    whatsapp_api_version: str = "v21.0"
 
 
 @lru_cache

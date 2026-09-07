@@ -26,6 +26,10 @@ class Business(BaseModel):
     address: Optional[str] = None
     gst_number: Optional[str] = None
 
+    # UPI VPA (e.g. "shopname@upi") used to build payment-request links
+    # sent to customers over WhatsApp.
+    upi_vpa: Optional[str] = None
+
     invoice_prefix: str = "INV"
 
     logo_path: Optional[str] = None

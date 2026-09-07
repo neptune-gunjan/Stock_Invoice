@@ -11,6 +11,7 @@ import {
   FilePlus2,
   Filter,
   Loader2,
+  MessageCircle,
   Pencil,
   Plus,
   ReceiptText,
@@ -58,6 +59,7 @@ import {
   type StockInput,
   type StockItem,
   type StockMovement,
+  type WhatsAppSendResult,
 } from '@/lib/data';
 import './index.css';
 
@@ -1913,6 +1915,9 @@ function InvoicePage() {
       );
     }
   };
+  const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
+  const [whatsappError, setWhatsappError] = useState('');
+  const [whatsappResult, setWhatsappResult] = useState<WhatsAppSendResult | null>(null);
 
   const customerName = useMemo(() => {
     if (!invoice.data?.customer_id) return null;
@@ -1935,6 +1940,21 @@ function InvoicePage() {
       setPdfError(errorMessage(e, 'PDF download failed.'));
     } finally {
       setDownloading(false);
+    }
+  };
+
+  const sendWhatsapp = async () => {
+    if (!invoiceId) return;
+    setSendingWhatsapp(true);
+    setWhatsappError('');
+    setWhatsappResult(null);
+    try {
+      const result = await endpoints.sendInvoiceWhatsapp(invoiceId);
+      setWhatsappResult(result);
+    } catch (e) {
+      setWhatsappError(errorMessage(e, 'Could not send invoice over WhatsApp.'));
+    } finally {
+      setSendingWhatsapp(false);
     }
   };
 
@@ -1975,8 +1995,16 @@ function InvoicePage() {
           >
             <ArrowLeft size={16} /> Transaction history
           </Link>
-
           <div className="flex flex-wrap gap-2">
+            <button
+              onClick={sendWhatsapp}
+              disabled={sendingWhatsapp}
+              className={buttonQuiet}
+              data-testid="button-send-whatsapp"
+            >
+              <MessageCircle size={16} /> {sendingWhatsapp ? 'Sending…' : 'Send via WhatsApp'}
+            </button>
+
             <button
               onClick={handleCancel}
               disabled={cancel.isPending || data.status === 'cancelled'}
@@ -2007,6 +2035,23 @@ function InvoicePage() {
         {pdfError && (
           <div className="mb-4">
             <ErrorNotice message={pdfError} />
+          </div>
+        )}
+        {whatsappError && (
+          <div className="mb-4">
+            <ErrorNotice message={whatsappError} />
+          </div>
+        )}
+        {whatsappResult && (
+          <div className="mb-4 rounded-xl border border-border bg-muted/35 px-4 py-3 text-sm">
+            {whatsappResult.document_sent ? 'Invoice PDF sent to the customer on WhatsApp.' : 'Could not deliver the PDF over WhatsApp.'}
+            {whatsappResult.payment_link_sent && ' Payment link sent too.'}
+            {!whatsappResult.whatsapp_configured && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                WhatsApp isn't connected yet — this was only logged, not actually sent. Add WHATSAPP_ACCESS_TOKEN /
+                WHATSAPP_PHONE_NUMBER_ID on the backend to send for real.
+              </p>
+            )}
           </div>
         )}
         <PageHeading
@@ -5179,6 +5224,7 @@ function BusinessPage() {
     email: '',
     address: '',
     gst_number: '',
+    upi_vpa: '',
   });
 
   // const [initialized, setInitialized] = useState(false);
@@ -5196,6 +5242,7 @@ function BusinessPage() {
       email: business.data.email ?? '',
       address: business.data.address ?? '',
       gst_number: business.data.gst_number ?? '',
+      upi_vpa: business.data.upi_vpa ?? '',
     });
   }, [business.data]);
 
@@ -5219,6 +5266,7 @@ function BusinessPage() {
             email: form.email.trim() || null,
             address: form.address.trim() || null,
             gst_number: form.gst_number.trim() || null,
+            upi_vpa: form.upi_vpa.trim() || null,
           },
         });
 
@@ -5230,6 +5278,7 @@ function BusinessPage() {
           email: form.email.trim() || null,
           address: form.address.trim() || null,
           gst_number: form.gst_number.trim() || null,
+          upi_vpa: form.upi_vpa.trim() || null,
         });
 
         setSuccess('Business created successfully.');
@@ -5445,6 +5494,28 @@ function BusinessPage() {
                 placeholder="Enter GSTIN"
                 className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm uppercase outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
               />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold">
+                UPI ID
+              </label>
+
+              <input
+                type="text"
+                value={form.upi_vpa}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    upi_vpa: event.target.value,
+                  }))
+                }
+                placeholder="yourshop@upi"
+                className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
+              />
+              <p className="mt-2 text-xs text-muted-foreground">
+                Used to generate the payment link sent alongside invoices over WhatsApp.
+              </p>
             </div>
           </div>
 

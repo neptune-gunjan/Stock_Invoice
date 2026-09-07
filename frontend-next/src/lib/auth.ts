@@ -23,7 +23,37 @@ interface TokenResponse {
 
 const USER_KEY = 'auth_user';
 
-export const hasSession = () => Boolean(getToken());
+/**
+ * Reads the `exp` claim (seconds since epoch) from a JWT without verifying the
+ * signature -- enough to know locally whether the token is already stale.
+ */
+const tokenExpiry = (token: string): number | null => {
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return null;
+    const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+    const exp = (JSON.parse(json) as { exp?: number }).exp;
+    return typeof exp === 'number' ? exp : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * True only when a token exists and has not expired. Checking expiry here
+ * (rather than waiting for the backend to 401) lets guarded routes redirect
+ * straight to sign-in instead of rendering a page whose requests all fail.
+ */
+export const hasSession = () => {
+  const token = getToken();
+  if (!token) return false;
+  const exp = tokenExpiry(token);
+  if (exp !== null && exp * 1000 <= Date.now()) {
+    clearSession();
+    return false;
+  }
+  return true;
+};
 
 export const getStoredUser = (): AuthUser | null => {
   try {
