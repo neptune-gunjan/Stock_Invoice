@@ -19,11 +19,12 @@ export default defineConfig({
     port: 5174,
     strictPort: false,
     proxy: {
-      // Proxy API calls in dev so the browser talks to one origin and cookies
-      // / CORS are a non-issue. Every backend router prefix is listed here.
+      // Proxy API calls to the backend. Some prefixes (/dashboard, /customers,
+      // /business) double as client routes, so page navigations go to the SPA.
       '^/(auth|stock|extract|match|confirm|invoices|customers|business|dashboard)(/|$)': {
         target: apiBaseUrl,
         changeOrigin: true,
+        bypass: (req) => (req.headers.accept?.includes('text/html') ? '/index.html' : undefined),
       },
     },
   },
