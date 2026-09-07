@@ -11,9 +11,10 @@ from app.dependencies import (
     get_customer_service,
     get_invoice_service,
     get_transaction_service,
+    get_payment_repository,
 )
 from app.models.user import User
-from app.schemas.customer import (CustomerCreate, CustomerRead, CustomerSummaryRead, CustomerUpdate,)
+from app.schemas.customer import (CustomerCreate, CustomerRead, CustomerLedgerEntryRead, CustomerSummaryRead, CustomerUpdate,)
 from app.schemas.transaction import TransactionRead
 from app.services.customer_service import (
     CustomerNotFoundError,
@@ -21,6 +22,7 @@ from app.services.customer_service import (
 )
 from app.services.invoice_service import InvoiceService
 from app.services.transaction_service import TransactionService
+from app.repositories.payment import PaymentRepository
 
 
 router = APIRouter(
@@ -184,21 +186,26 @@ def list_customer_transactions(
             business_id=current_user.business_id,
         )
 
-        # Transaction without invoice should not be
-        # returned because invoice fields are mandatory
-        # in TransactionRead.
+        # Transaction without invoice should not be returned.
         if invoice is None:
             continue
 
-        payment_summary = invoice_service.get_payment_summary(
+        payment_details = invoice_service.get_payment_details(
             invoice.id,
             business_id=current_user.business_id,
         )
 
-        if payment_summary is None:
+        if payment_details is None:
             continue
 
-        paid_amount, remaining_amount, payment_status = payment_summary
+        (
+            paid_amount,
+            remaining_amount,
+            payment_status,
+            last_payment_amount,
+            last_payment_method,
+            last_payment_at,
+        ) = payment_details
 
         result.append(
             TransactionRead(
@@ -208,6 +215,9 @@ def list_customer_transactions(
                 paid_amount=paid_amount,
                 remaining_amount=remaining_amount,
                 payment_status=payment_status,
+                last_payment_amount=last_payment_amount,
+                last_payment_method=last_payment_method,
+                last_payment_at=last_payment_at,
                 items=items,
             )
         )
@@ -218,6 +228,7 @@ def list_customer_transactions(
 # ============================================================
 # Customer Summary
 # ============================================================
+
 
 @router.get(
     "/{customer_id}/summary",
@@ -290,7 +301,11 @@ def get_customer_summary(
         )
 
         if payment_summary is not None:
-            paid_amount, remaining_amount, _ = payment_summary
+            (
+                paid_amount,
+                remaining_amount,
+                _,
+            ) = payment_summary
 
             total_paid += paid_amount
             total_due += remaining_amount
@@ -312,3 +327,148 @@ def get_customer_summary(
         last_purchase_at=last_purchase_at,
         customer_since=customer.created_at,
     )
+
+# ============================================================
+# Customer Ledger
+# ============================================================
+
+@router.get(
+    "/{customer_id}/ledger",
+    response_model=list[CustomerLedgerEntryRead],
+)
+def get_customer_ledger(
+    customer_id: uuid.UUID,
+    customer_service: CustomerService = Depends(
+        get_customer_service
+    ),
+    transaction_service: TransactionService = Depends(
+        get_transaction_service
+    ),
+    invoice_service: InvoiceService = Depends(
+        get_invoice_service
+    ),
+    payment_repository: PaymentRepository = Depends(
+            get_payment_repository
+        ),
+    current_user: User = Depends(
+        get_current_user
+    ),
+) -> list[CustomerLedgerEntryRead]:
+
+    if current_user.business_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User is not associated with a business.",
+        )
+
+    try:
+        customer_service.require_active(
+            customer_id,
+            business_id=current_user.business_id,
+        )
+
+    except CustomerNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    transactions = transaction_service.list_by_customer(
+        customer_id,
+        business_id=current_user.business_id,
+    )
+
+    invoice_ids: list[uuid.UUID] = []
+    invoice_map = {}
+
+    for transaction in transactions:
+        invoice = invoice_service.get_by_transaction(
+            transaction.id,
+            business_id=current_user.business_id,
+        )
+
+        if invoice is None:
+            continue
+
+        if invoice.deleted_at is not None:
+            continue
+
+        invoice_ids.append(invoice.id)
+        invoice_map[invoice.id] = (
+            transaction,
+            invoice,
+        )
+
+    payments = (
+        payment_repository.list_by_invoices(invoice_ids)
+        if invoice_ids
+        else []
+    )
+
+    events: list[dict] = []
+
+    for invoice_id in invoice_ids:
+        transaction, invoice = invoice_map[invoice_id]
+
+        events.append(
+            {
+                "date": transaction.created_at,
+                "type": "invoice",
+                "reference": invoice.invoice_number,
+                "description": "Invoice",
+                "debit": float(invoice.total_amount),
+                "credit": 0.0,
+            }
+        )
+
+    for payment in payments:
+        invoice_info = invoice_map.get(
+            payment.invoice_id
+        )
+
+        if invoice_info is None:
+            continue
+
+        _, invoice = invoice_info
+
+        events.append(
+            {
+                "date": payment.paid_at,
+                "type": "payment",
+                "reference": invoice.invoice_number,
+                "description": (
+                    f"Payment · "
+                    f"{payment.payment_method.replace('_', ' ').title()}"
+                ),
+                "debit": 0.0,
+                "credit": float(payment.amount),
+            }
+        )
+
+    events.sort(
+        key=lambda event: (
+            event["date"],
+            0 if event["type"] == "invoice" else 1,
+        )
+    )
+
+    balance = 0.0
+    result: list[CustomerLedgerEntryRead] = []
+
+    for event in events:
+        balance += event["debit"]
+        balance -= event["credit"]
+
+        result.append(
+            CustomerLedgerEntryRead(
+                date=event["date"],
+                type=event["type"],
+                reference=event["reference"],
+                description=event["description"],
+                debit=event["debit"],
+                credit=event["credit"],
+                balance=max(balance, 0.0),
+            )
+        )
+
+    return result

@@ -60,6 +60,10 @@ class TransactionRead(BaseModel):
     remaining_amount: float = 0
     payment_status: str = "pending"
 
+    last_payment_amount: float = 0
+    last_payment_method: Optional[str] = None
+    last_payment_at: Optional[datetime] = None
+
     created_at: datetime
 
     items: list[TransactionItemRead] = Field(default_factory=list)

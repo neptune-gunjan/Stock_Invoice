@@ -15,6 +15,8 @@ class CustomerCreate(BaseModel):
     business_name: Optional[str] = None
     address: Optional[str] = None
     gst_number: Optional[str] = None
+    credit_limit: float = Field(default=0, ge=0)
+    payment_terms_days: int = Field(default=0, ge=0)
 
 
 class CustomerUpdate(BaseModel):
@@ -26,6 +28,14 @@ class CustomerUpdate(BaseModel):
     business_name: Optional[str] = None
     address: Optional[str] = None
     gst_number: Optional[str] = None
+    credit_limit: Optional[float] = Field(
+        default=None,
+        ge=0,
+    )
+    payment_terms_days: Optional[int] = Field(
+        default=None,
+        ge=0,
+    )
 
 
 class CustomerRead(BaseModel):
@@ -35,6 +45,8 @@ class CustomerRead(BaseModel):
     business_name: Optional[str]
     address: Optional[str]
     gst_number: Optional[str]
+    credit_limit: float
+    payment_terms_days: int
     created_at: datetime
     updated_at: datetime
 
@@ -53,5 +65,16 @@ class CustomerSummaryRead(BaseModel):
 
     last_purchase_at: Optional[datetime]
     customer_since: datetime
+
+    model_config = {"from_attributes": True}
+
+class CustomerLedgerEntryRead(BaseModel):
+    date: datetime
+    type: str
+    reference: str
+    description: str
+    debit: float
+    credit: float
+    balance: float
 
     model_config = {"from_attributes": True}

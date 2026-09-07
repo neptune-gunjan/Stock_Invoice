@@ -40,3 +40,15 @@ class JsonFilePaymentRepository(PaymentRepository):
             for payment in self._store.read_all()
             if payment.invoice_id == invoice_id
         ]
+
+    def list_by_invoices(
+        self,
+        invoice_ids: list[uuid.UUID],
+    ) -> list[Payment]:
+        invoice_id_set = set(invoice_ids)
+
+        return [
+            payment
+            for payment in self._store.read_all()
+            if payment.invoice_id in invoice_id_set
+        ]

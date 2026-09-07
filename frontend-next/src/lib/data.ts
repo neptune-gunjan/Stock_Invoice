@@ -119,6 +119,11 @@ export interface Transaction {
   remaining_amount: number;
   payment_status: string;
 
+  last_payment_amount: number;
+  last_payment_method: string | null;
+  last_payment_at: string | null;
+
+
   created_at: string;
   items: TransactionItem[];
 }
@@ -135,6 +140,15 @@ export interface CustomerSummary {
   customer_since: string;
 }
 
+export interface CustomerLedgerEntry {
+  date: string;
+  type: 'invoice' | 'payment';
+  reference: string;
+  description: string;
+  debit: number;
+  credit: number;
+  balance: number;
+}
 export interface Invoice {
   id: string;
   invoice_number: string;
@@ -174,7 +188,13 @@ export interface Customer {
   id: string;
   name: string;
   phone: string | null;
+  business_name: string | null;
+  address: string | null;
+  gst_number: string | null;
+  credit_limit: number;
+  payment_terms_days: number;
   created_at: string;
+  updated_at: string;
 }
 
 export interface DashboardSummary {
@@ -354,18 +374,51 @@ export const endpoints = {
   listCustomers: () =>
     apiJson<Customer[]>('/customers'),
 
-  createCustomer: (name: string, phone?: string) =>
+  createCustomer: (
+    name: string,
+    phone?: string,
+    data?: {
+      business_name?: string;
+      address?: string;
+      gst_number?: string;
+      credit_limit?: number;
+      payment_terms_days?: number;
+    },
+  ) =>
     apiJson<Customer>('/customers', {
       method: 'POST',
       body: {
         name,
         phone: phone || null,
+        ...data,
       },
+    }),
+
+  updateCustomer: (
+    customerId: string,
+    data: {
+      name?: string;
+      phone?: string | null;
+      business_name?: string | null;
+      address?: string | null;
+      gst_number?: string | null;
+      credit_limit?: number;
+      payment_terms_days?: number;
+    },
+  ) =>
+    apiJson<Customer>(`/customers/${customerId}`, {
+      method: 'PATCH',
+      body: data,
     }),
 
   customerTransactions: (customerId: string) =>
     apiJson<Transaction[]>(
       `/customers/${customerId}/transactions`,
+    ),
+
+  getCustomerLedger: (customerId: string) =>
+    apiJson<CustomerLedgerEntry[]>(
+      `/customers/${customerId}/ledger`,
     ),
 
   customerSummary: (customerId: string) =>
@@ -544,6 +597,21 @@ export function useCustomerTransactions(
     queryKey: queryKeys.customerTransactions(customerId ?? ''),
     queryFn: () =>
       endpoints.customerTransactions(customerId as string),
+    enabled: Boolean(customerId),
+  });
+}
+
+export function useCustomerLedger(
+  customerId: string | undefined,
+) {
+  return useQuery({
+    queryKey: [
+      'customers',
+      customerId,
+      'ledger',
+    ],
+    queryFn: () =>
+      endpoints.getCustomerLedger(customerId!),
     enabled: Boolean(customerId),
   });
 }

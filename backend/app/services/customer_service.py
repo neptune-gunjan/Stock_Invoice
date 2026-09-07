@@ -54,6 +54,8 @@ class CustomerService:
             business_name=data.business_name,
             address=data.address,
             gst_number=data.gst_number,
+            credit_limit=data.credit_limit,
+            payment_terms_days=data.payment_terms_days,
         )
 
         return self._repository.add(customer)

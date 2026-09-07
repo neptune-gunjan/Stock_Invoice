@@ -17,5 +17,15 @@ class PaymentRepository(ABC):
         ...
 
     @abstractmethod
-    def list_by_invoice(self, invoice_id: uuid.UUID) -> list[Payment]:
+    def list_by_invoice(
+        self,
+        invoice_id: uuid.UUID,
+    ) -> list[Payment]:
+        ...
+
+    @abstractmethod
+    def list_by_invoices(
+        self,
+        invoice_ids: list[uuid.UUID],
+    ) -> list[Payment]:
         ...

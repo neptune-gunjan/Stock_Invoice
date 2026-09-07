@@ -49,6 +49,7 @@ import {
   useInvoicePayments,
   useInvoiceMutations,
   useCustomerTransactions,
+  useCustomerLedger,
   Customer,
   useBusiness,
   useBusinessMutations,
@@ -2813,8 +2814,9 @@ function CatalogPage() {
   );
 }
 
+
 /* ---------------------------------------------------------------------------
- * Customers
+ * Retailer Management
  * ------------------------------------------------------------------------ */
 
 function CustomersPage() {
@@ -2827,6 +2829,11 @@ function CustomersPage() {
   const [form, setForm] = useState({
     name: '',
     phone: '',
+    business_name: '',
+    address: '',
+    gst_number: '',
+    credit_limit: '0',
+    payment_terms_days: '0',
   });
 
   const [error, setError] = useState('');
@@ -2840,28 +2847,49 @@ function CustomersPage() {
     if (!search) return customerList;
 
     return customerList.filter((customer) =>
-      `${customer.name} ${customer.phone ?? ''}`
+      [
+        customer.name,
+        customer.phone ?? '',
+        customer.business_name ?? '',
+        customer.gst_number ?? '',
+        customer.address ?? '',
+      ]
+        .join(' ')
         .toLowerCase()
         .includes(search),
     );
   }, [customerList, query]);
 
-  const openCreate = () => {
-    setEditingId(null);
+  const resetForm = () => {
     setForm({
       name: '',
       phone: '',
+      business_name: '',
+      address: '',
+      gst_number: '',
+      credit_limit: '0',
+      payment_terms_days: '0',
     });
+  };
+
+  const openCreate = () => {
+    setEditingId(null);
+    resetForm();
     setError('');
     setShowForm(true);
   };
 
-  const openEdit = (customer: any) => {
+  const openEdit = (customer: Customer) => {
     setEditingId(customer.id);
 
     setForm({
       name: customer.name ?? '',
       phone: customer.phone ?? '',
+      business_name: customer.business_name ?? '',
+      address: customer.address ?? '',
+      gst_number: customer.gst_number ?? '',
+      credit_limit: String(customer.credit_limit ?? 0),
+      payment_terms_days: String(customer.payment_terms_days ?? 0),
     });
 
     setError('');
@@ -2871,12 +2899,7 @@ function CustomersPage() {
   const closeForm = () => {
     setShowForm(false);
     setEditingId(null);
-
-    setForm({
-      name: '',
-      phone: '',
-    });
-
+    resetForm();
     setError('');
   };
 
@@ -2884,7 +2907,20 @@ function CustomersPage() {
     event.preventDefault();
 
     if (!form.name.trim()) {
-      setError('Customer name is required.');
+      setError('Retailer name is required.');
+      return;
+    }
+
+    const creditLimit = Number(form.credit_limit);
+    const paymentTerms = Number(form.payment_terms_days);
+
+    if (!Number.isFinite(creditLimit) || creditLimit < 0) {
+      setError('Credit limit must be a valid non-negative amount.');
+      return;
+    }
+
+    if (!Number.isInteger(paymentTerms) || paymentTerms < 0) {
+      setError('Payment terms must be a valid number of days.');
       return;
     }
 
@@ -2892,39 +2928,50 @@ function CustomersPage() {
     setError('');
 
     try {
+      const payload = {
+        name: form.name.trim(),
+        phone: form.phone.trim() || null,
+        business_name: form.business_name.trim() || null,
+        address: form.address.trim() || null,
+        gst_number: form.gst_number.trim() || null,
+        credit_limit: creditLimit,
+        payment_terms_days: paymentTerms,
+      };
+
       if (!editingId) {
         await endpoints.createCustomer(
-          form.name.trim(),
-          form.phone.trim() || undefined,
-        );
-      } else if ((endpoints as any).updateCustomer) {
-        await (endpoints as any).updateCustomer(
-          editingId,
-          form.name.trim(),
-          form.phone.trim() || undefined,
+          payload.name,
+          payload.phone || undefined,
+          {
+            business_name: payload.business_name ?? undefined,
+            address: payload.address ?? undefined,
+            gst_number: payload.gst_number ?? undefined,
+            credit_limit: payload.credit_limit,
+            payment_terms_days: payload.payment_terms_days,
+          },
         );
       } else {
-        setError(
-          'Customer update API is not available yet. You can still add new customers.',
+        await endpoints.updateCustomer(
+          editingId,
+          payload,
         );
-        return;
       }
 
       await customers.refetch();
       closeForm();
     } catch (e) {
       setError(
-        errorMessage(e, 'Could not save customer.'),
+        errorMessage(e, 'Could not save retailer.'),
       );
     } finally {
       setSaving(false);
     }
   };
 
-  const deleteCustomer = async (customer: any) => {
+  const deleteCustomer = async (customer: Customer) => {
     if (
       !window.confirm(
-        `Delete customer "${customer.name}"?`,
+        `Delete retailer "${customer.name}"?`,
       )
     ) {
       return;
@@ -2936,12 +2983,12 @@ function CustomersPage() {
         await customers.refetch();
       } else {
         setError(
-          'Customer delete API is not available yet.',
+          'Retailer delete API is not available yet.',
         );
       }
     } catch (e) {
       setError(
-        errorMessage(e, 'Could not delete customer.'),
+        errorMessage(e, 'Could not delete retailer.'),
       );
     }
   };
@@ -2949,9 +2996,9 @@ function CustomersPage() {
   return (
     <AppShell>
       <PageHeading
-        eyebrow="Customers"
-        title="Know your customers."
-        description="Keep customer details organized so invoices and receipts are easier to manage."
+        eyebrow="Retailer Management"
+        title="Manage your retailers."
+        description="Keep retailer profiles, GST details, credit limits and payment terms organized in one place."
         action={
           <button
             onClick={openCreate}
@@ -2959,7 +3006,7 @@ function CustomersPage() {
             data-testid="button-add-customer"
           >
             <Plus size={17} />
-            Add customer
+            Add retailer
           </button>
         }
       />
@@ -2976,14 +3023,14 @@ function CustomersPage() {
             className={`${inputClass} pl-10`}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search customer name or phone"
+            placeholder="Search retailer, business, phone or GST"
             data-testid="input-search-customers"
           />
         </div>
 
         <div className="flex min-h-11 items-center gap-2 rounded-xl border border-border bg-card px-4 text-xs text-muted-foreground">
           <Filter size={15} />
-          {shown.length} of {customerList.length} customers
+          {shown.length} of {customerList.length} retailers
         </div>
       </div>
 
@@ -3000,13 +3047,13 @@ function CustomersPage() {
           <div className="mb-5 flex items-center justify-between">
             <div>
               <p className="mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">
-                Customer details
+                Retailer profile
               </p>
 
               <h2 className="mt-1 text-lg font-extrabold">
                 {editingId
-                  ? 'Edit customer'
-                  : 'Add new customer'}
+                  ? 'Edit retailer'
+                  : 'Add new retailer'}
               </h2>
             </div>
 
@@ -3023,8 +3070,9 @@ function CustomersPage() {
             onSubmit={saveCustomer}
             className="grid gap-4 sm:grid-cols-2"
           >
+            {/* Name */}
             <label className="text-sm font-bold">
-              Customer name
+              Retailer name
 
               <input
                 className={`${inputClass} mt-2`}
@@ -3041,6 +3089,7 @@ function CustomersPage() {
               />
             </label>
 
+            {/* Phone */}
             <label className="text-sm font-bold">
               Phone number
 
@@ -3058,6 +3107,106 @@ function CustomersPage() {
               />
             </label>
 
+            {/* Business */}
+            <label className="text-sm font-bold">
+              Business name
+
+              <input
+                className={`${inputClass} mt-2`}
+                value={form.business_name}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    business_name: e.target.value,
+                  })
+                }
+                placeholder="e.g. Rahul General Store"
+              />
+            </label>
+
+            {/* GST */}
+            <label className="text-sm font-bold">
+              GST number
+
+              <input
+                className={`${inputClass} mt-2 uppercase`}
+                value={form.gst_number}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    gst_number: e.target.value.toUpperCase(),
+                  })
+                }
+                placeholder="e.g. 08ABCDE1234F1Z5"
+              />
+            </label>
+
+            {/* Address */}
+            <label className="text-sm font-bold sm:col-span-2">
+              Address
+
+              <textarea
+                className={`${inputClass} mt-2 min-h-24 py-3`}
+                value={form.address}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    address: e.target.value,
+                  })
+                }
+                placeholder="Retailer shop / billing address"
+              />
+            </label>
+
+            {/* Credit Limit */}
+            <label className="text-sm font-bold">
+              Credit limit (₹)
+
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                className={`${inputClass} mt-2`}
+                value={form.credit_limit}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    credit_limit: e.target.value,
+                  })
+                }
+                placeholder="50000"
+              />
+
+              <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                Maximum outstanding amount allowed for this retailer.
+              </span>
+            </label>
+
+            {/* Payment Terms */}
+            <label className="text-sm font-bold">
+              Payment terms (days)
+
+              <input
+                type="number"
+                min="0"
+                step="1"
+                className={`${inputClass} mt-2`}
+                value={form.payment_terms_days}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    payment_terms_days: e.target.value,
+                  })
+                }
+                placeholder="30"
+              />
+
+              <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                Example: 30 means payment is expected within 30 days.
+              </span>
+            </label>
+
+            {/* Actions */}
             <div className="flex gap-2 sm:col-span-2">
               <button
                 type="submit"
@@ -3077,8 +3226,8 @@ function CustomersPage() {
                   <>
                     <Check size={16} />
                     {editingId
-                      ? 'Update customer'
-                      : 'Save customer'}
+                      ? 'Update retailer'
+                      : 'Save retailer'}
                   </>
                 )}
               </button>
@@ -3095,13 +3244,13 @@ function CustomersPage() {
         </SectionCard>
       )}
 
-      {/* Customer List */}
+      {/* Retailer List */}
       {customers.isError && (
         <div className="mb-5">
           <ErrorNotice
             message={errorMessage(
               customers.error,
-              'Could not load customers.',
+              'Could not load retailers.',
             )}
             onRetry={() => customers.refetch()}
           />
@@ -3110,26 +3259,28 @@ function CustomersPage() {
 
       {customers.isLoading ? (
         <SectionCard>
-          <Loading label="Loading customers…" />
+          <Loading label="Loading retailers…" />
         </SectionCard>
       ) : shown.length > 0 ? (
         <SectionCard className="overflow-hidden">
 
           {/* Desktop header */}
-          <div className="hidden grid-cols-[1.5fr_1fr_100px] gap-4 border-b border-border bg-muted/45 px-5 py-3 mono text-[10px] uppercase tracking-wider text-muted-foreground sm:grid">
-            <span>Customer</span>
-            <span>Phone</span>
+          <div className="hidden grid-cols-[1.5fr_1.1fr_1fr_1fr_100px] gap-4 border-b border-border bg-muted/45 px-5 py-3 mono text-[10px] uppercase tracking-wider text-muted-foreground sm:grid">
+            <span>Retailer</span>
+            <span>Business</span>
+            <span>Credit limit</span>
+            <span>Payment terms</span>
             <span />
           </div>
 
           <div className="divide-y divide-border">
-            {shown.map((customer: any, index: number) => (
+            {shown.map((customer, index) => (
               <div
                 key={customer.id}
-                className="grid gap-4 px-5 py-5 transition hover:bg-muted/30 sm:grid-cols-[1.5fr_1fr_100px] sm:items-center"
+                className="grid gap-4 px-5 py-5 transition hover:bg-muted/30 sm:grid-cols-[1.5fr_1.1fr_1fr_1fr_100px] sm:items-center"
                 data-testid={`row-customer-${customer.id}`}
               >
-                {/* Customer */}
+                {/* Retailer */}
                 <Link
                   href={`/customers/${customer.id}`}
                   className="flex min-w-0 items-center gap-3"
@@ -3147,16 +3298,42 @@ function CustomersPage() {
                       {customer.name}
                     </p>
 
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Customer #{String(index + 1).padStart(2, '0')}
+                    <p className="mt-1 truncate text-xs text-muted-foreground">
+                      {customer.phone || 'No phone number'}
                     </p>
                   </div>
                 </Link>
 
-                {/* Phone */}
+                {/* Business */}
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">
+                    {customer.business_name || '—'}
+                  </p>
+
+                  <p className="mt-1 truncate text-xs text-muted-foreground">
+                    {customer.gst_number || 'No GST'}
+                  </p>
+                </div>
+
+                {/* Credit */}
                 <div>
-                  <p className="text-sm text-muted-foreground">
-                    {customer.phone || 'No phone number'}
+                  <p className="text-sm font-bold">
+                    {money(customer.credit_limit ?? 0)}
+                  </p>
+
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Credit limit
+                  </p>
+                </div>
+
+                {/* Terms */}
+                <div>
+                  <p className="text-sm font-bold">
+                    {customer.payment_terms_days ?? 0} days
+                  </p>
+
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Payment terms
                   </p>
                 </div>
 
@@ -3189,13 +3366,13 @@ function CustomersPage() {
           <EmptyState
             title={
               query
-                ? 'No customers found'
-                : 'No customers yet'
+                ? 'No retailers found'
+                : 'No retailers yet'
             }
             body={
               query
-                ? 'Try searching with a different name or phone number.'
-                : 'Add your first customer to keep your invoices organized.'
+                ? 'Try searching with a different name, business, phone or GST number.'
+                : 'Add your first retailer to start managing profiles, credit and payment terms.'
             }
             action={
               !query ? (
@@ -3204,7 +3381,7 @@ function CustomersPage() {
                   className={buttonPrimary}
                 >
                   <Plus size={16} />
-                  Add customer
+                  Add retailer
                 </button>
               ) : undefined
             }
@@ -3215,11 +3392,14 @@ function CustomersPage() {
   );
 }
 
+
+
 function CustomerDetailPage() {
   const { customerId } = useParams<{ customerId: string }>();
 
   const customers = useCustomers();
   const transactions = useCustomerTransactions(customerId);
+  const ledger = useCustomerLedger(customerId);
 
   const customer = customers.data?.find(
     (item) => item.id === customerId,
@@ -3227,25 +3407,172 @@ function CustomerDetailPage() {
 
   const customerInvoices = transactions.data ?? [];
 
+  // Find most recent payment across all invoices
+  const paymentsWithDates = customerInvoices
+    .filter(
+      (invoice) =>
+        invoice.last_payment_at &&
+        Number(invoice.last_payment_amount || 0) > 0,
+    )
+    .sort(
+      (a, b) =>
+        new Date(b.last_payment_at!).getTime() -
+        new Date(a.last_payment_at!).getTime(),
+    );
+
+  const lastPayment = paymentsWithDates[0] ?? null;
+
+  const [paymentInvoice, setPaymentInvoice] =
+    useState<string | null>(null);
+
+  const [paymentAmount, setPaymentAmount] = useState('');
+
+  const [paymentMethod, setPaymentMethod] =
+    useState('cash');
+
+  const [paymentError, setPaymentError] = useState('');
+
+  const [paymentSaving, setPaymentSaving] =
+    useState(false);
+
   const totalPurchase = customerInvoices.reduce(
-    (sum, invoice) => sum + Number(invoice.total_amount || 0),
+    (sum, invoice) =>
+      sum + Number(invoice.total_amount || 0),
     0,
   );
 
   const paidAmount = customerInvoices.reduce(
-    (sum, invoice) => sum + Number(invoice.paid_amount || 0),
+    (sum, invoice) =>
+      sum + Number(invoice.paid_amount || 0),
     0,
   );
 
   const remainingAmount = customerInvoices.reduce(
-    (sum, invoice) => sum + Number(invoice.remaining_amount || 0),
+    (sum, invoice) =>
+      sum + Number(invoice.remaining_amount || 0),
     0,
   );
+
+  const creditLimit = Number(
+    customer?.credit_limit ?? 0,
+  );
+
+  const availableCredit = Math.max(
+    creditLimit - remainingAmount,
+    0,
+  );
+
+  const getDueStatus = (
+    invoiceCreatedAt: string,
+    dueDays: number,
+    remaining: number,
+  ) => {
+    // Fully paid invoice
+    if (remaining <= 0) {
+      return {
+        label: 'Paid',
+        className: 'text-muted-foreground',
+      };
+    }
+
+    const createdDate = new Date(invoiceCreatedAt);
+
+    const dueDate = new Date(createdDate);
+    dueDate.setDate(
+      dueDate.getDate() + dueDays,
+    );
+
+    const today = new Date();
+
+    // Compare dates only, not time
+    today.setHours(0, 0, 0, 0);
+    dueDate.setHours(0, 0, 0, 0);
+
+    const diffMs =
+      dueDate.getTime() - today.getTime();
+
+    const diffDays = Math.ceil(
+      diffMs / (1000 * 60 * 60 * 24),
+    );
+
+    if (diffDays < 0) {
+      const overdueDays = Math.abs(diffDays);
+
+      return {
+        label: `${overdueDays} ${
+          overdueDays === 1 ? 'day' : 'days'
+        } overdue`,
+        className: 'font-bold text-destructive',
+      };
+    }
+
+    if (diffDays === 0) {
+      return {
+        label: 'Due today',
+        className: 'font-bold text-destructive',
+      };
+    }
+
+    return {
+      label: `Due in ${diffDays} ${
+        diffDays === 1 ? 'day' : 'days'
+      }`,
+      className: 'font-bold text-foreground',
+    };
+  };
+
+  const submitRetailerPayment = async (
+    invoiceId: string,
+    remaining: number,
+  ) => {
+    const amount = Number(paymentAmount);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setPaymentError(
+        'Enter a valid payment amount.',
+      );
+      return;
+    }
+
+    if (amount > remaining) {
+      setPaymentError(
+        'Payment cannot be greater than the outstanding amount.',
+      );
+      return;
+    }
+
+    setPaymentSaving(true);
+    setPaymentError('');
+
+    try {
+      await endpoints.addPayment(invoiceId, {
+        amount,
+        payment_method: paymentMethod,
+      });
+
+      setPaymentAmount('');
+      setPaymentInvoice(null);
+
+      await Promise.all([
+        transactions.refetch(),
+        ledger.refetch(),
+      ]);
+    } catch (e) {
+      setPaymentError(
+        errorMessage(
+          e,
+          'Could not record payment.',
+        ),
+      );
+    } finally {
+      setPaymentSaving(false);
+    }
+  };
 
   if (customers.isLoading) {
     return (
       <AppShell>
-        <Loading label="Loading customer…" />
+        <Loading label="Loading retailer…" />
       </AppShell>
     );
   }
@@ -3254,15 +3581,15 @@ function CustomerDetailPage() {
     return (
       <AppShell>
         <EmptyState
-          title="Customer not found"
-          body="This customer could not be found."
+          title="Retailer not found"
+          body="This retailer could not be found."
           action={
             <Link
               href="/customers"
               className={buttonPrimary}
             >
               <ArrowLeft size={16} />
-              Back to customers
+              Back to retailers
             </Link>
           }
         />
@@ -3280,36 +3607,40 @@ function CustomerDetailPage() {
           className="mb-7 inline-flex items-center gap-2 text-sm font-bold text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft size={16} />
-          Customers
+          Retailers
         </Link>
 
         {/* Header */}
         <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-
           <div className="flex items-center gap-4">
-            <div className="grid h-16 w-16 place-items-center rounded-2xl bg-primary text-xl font-extrabold text-primary-foreground">
+
+            <div className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-primary text-xl font-extrabold text-primary-foreground">
               {customer.name
                 ?.trim()
                 ?.charAt(0)
                 ?.toUpperCase() || '?'}
             </div>
 
-            <div>
+            <div className="min-w-0">
+
               <p className="mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">
-                Customer
+                Retailer
               </p>
 
-              <h1 className="mt-1 text-3xl font-extrabold tracking-[-.04em]">
+              <h1 className="mt-1 truncate text-3xl font-extrabold tracking-[-.04em]">
                 {customer.name}
               </h1>
 
               <p className="mt-1 text-sm text-muted-foreground">
-                {customer.phone || 'No phone number'}
+                {customer.business_name ||
+                  customer.phone ||
+                  'Retailer profile'}
               </p>
+
             </div>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Link
               href="/upload"
               className={buttonPrimary}
@@ -3320,8 +3651,77 @@ function CustomerDetailPage() {
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="grid gap-4 md:grid-cols-4">
+        {/* Retailer profile */}
+        <SectionCard className="mb-7 p-5">
+
+          <div className="mb-5">
+            <p className="mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">
+              Retailer profile
+            </p>
+
+            <h2 className="mt-1 text-lg font-extrabold">
+              Business information
+            </h2>
+          </div>
+
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+
+            <div>
+              <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                Business name
+              </p>
+
+              <p className="mt-2 text-sm font-bold">
+                {customer.business_name || '—'}
+              </p>
+            </div>
+
+            <div>
+              <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                Phone
+              </p>
+
+              <p className="mt-2 text-sm font-bold">
+                {customer.phone || '—'}
+              </p>
+            </div>
+
+            <div>
+              <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                GST number
+              </p>
+
+              <p className="mt-2 text-sm font-bold">
+                {customer.gst_number || '—'}
+              </p>
+            </div>
+
+            <div>
+              <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                Payment terms
+              </p>
+
+              <p className="mt-2 text-sm font-bold">
+                {customer.payment_terms_days ?? 0} days
+              </p>
+            </div>
+
+            <div className="sm:col-span-2 lg:col-span-4">
+              <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                Address
+              </p>
+
+              <p className="mt-2 text-sm font-medium">
+                {customer.address ||
+                  'No address added'}
+              </p>
+            </div>
+
+          </div>
+        </SectionCard>
+
+        {/* Financial stats */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
 
           <SectionCard className="p-5">
             <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -3367,7 +3767,7 @@ function CustomerDetailPage() {
 
           <SectionCard className="border-secondary/70 bg-secondary/10 p-5">
             <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
-              Due
+              Outstanding
             </p>
 
             <p className="mt-5 text-3xl font-extrabold">
@@ -3375,72 +3775,303 @@ function CustomerDetailPage() {
             </p>
 
             <p className="mt-1 text-xs text-muted-foreground">
-              Outstanding balance
+              Amount due
+            </p>
+          </SectionCard>
+
+          <SectionCard className="p-5">
+            <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              Available credit
+            </p>
+
+            <p className="mt-5 text-3xl font-extrabold">
+              {money(availableCredit)}
+            </p>
+
+            <p className="mt-1 text-xs text-muted-foreground">
+              Of {money(creditLimit)} limit
             </p>
           </SectionCard>
 
         </div>
 
-        {/* Invoice history */}
+        {/* Credit summary */}
+        <SectionCard className="mt-7 p-5">
+
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+
+            <div>
+
+              <p className="mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">
+                Credit account
+              </p>
+
+              <h2 className="mt-1 text-lg font-extrabold">
+                Credit utilization
+              </h2>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                {money(remainingAmount)} outstanding against a{' '}
+                {money(creditLimit)} credit limit.
+              </p>
+
+            </div>
+
+            <div className="text-left sm:text-right">
+
+              <p className="text-2xl font-extrabold">
+                {creditLimit > 0
+                  ? `${Math.min(
+                      (remainingAmount /
+                        creditLimit) *
+                        100,
+                      100,
+                    ).toFixed(0)}%`
+                  : '0%'}
+              </p>
+
+              <p className="text-xs text-muted-foreground">
+                Credit utilized
+              </p>
+
+            </div>
+
+          </div>
+
+          <div className="mt-5 h-3 overflow-hidden rounded-full bg-muted">
+
+            <div
+              className="h-full rounded-full bg-primary transition-all"
+              style={{
+                width:
+                  creditLimit > 0
+                    ? `${Math.min(
+                        (remainingAmount /
+                          creditLimit) *
+                          100,
+                        100,
+                      )}%`
+                    : '0%',
+              }}
+            />
+
+          </div>
+
+          <div className="mt-3 flex justify-between text-xs text-muted-foreground">
+
+            <span>
+              Outstanding: {money(remainingAmount)}
+            </span>
+
+            <span>
+              Available: {money(availableCredit)}
+            </span>
+
+          </div>
+
+        </SectionCard>
+
+        {/* Last payment */}
+        <SectionCard className="mt-7 p-5">
+
+          <p className="mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">
+            Last payment
+          </p>
+
+          {lastPayment ? (
+            <div className="mt-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+
+              <div>
+
+                <p className="text-2xl font-extrabold">
+                  {money(
+                    lastPayment.last_payment_amount,
+                  )}
+                </p>
+
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {lastPayment.last_payment_method
+                    ? lastPayment.last_payment_method
+                        .replaceAll('_', ' ')
+                        .replace(
+                          /\b\w/g,
+                          (char: string) => char.toUpperCase(),
+                        )
+                    : 'Payment'}
+                  {' · '}
+                  {dateLabel(
+                    lastPayment.last_payment_at!,
+                  )}
+                </p>
+
+              </div>
+
+              <Link
+                href={`/invoice/${lastPayment.invoice_id}`}
+                className="text-xs font-bold underline"
+              >
+                {lastPayment.invoice_number}
+              </Link>
+
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-muted-foreground">
+              No payments recorded yet.
+            </p>
+          )}
+
+        </SectionCard>
+
+        {/* Invoice / Ledger history */}
         <SectionCard className="mt-7 overflow-hidden">
 
           <div className="border-b border-border px-5 py-5">
-            <h2 className="font-extrabold">
-              Invoice history
+
+            <p className="mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">
+              Transaction history
+            </p>
+
+            <h2 className="mt-1 font-extrabold">
+              Retailer ledger
             </h2>
 
             <p className="mt-1 text-xs text-muted-foreground">
-              All invoices created for {customer.name}.
+              Invoice and payment history for{' '}
+              {customer.name}.
             </p>
+
           </div>
 
-          {transactions.isLoading ? (
-            <Loading label="Loading invoices…" />
-          ) : customerInvoices.length ? (
-            <>
-              <div className="hidden grid-cols-[1fr_.8fr_.8fr_120px] gap-4 border-b border-border px-5 py-3 mono text-[10px] uppercase tracking-wider text-muted-foreground sm:grid">
-                <span>Invoice</span>
+          {ledger.isLoading ? (
+            <Loading label="Loading ledger…" />
+          ) : ledger.isError ? (
+            <ErrorNotice
+              message={errorMessage(
+                ledger.error,
+                'Could not load retailer ledger.',
+              )}
+              onRetry={() => ledger.refetch()}
+            />
+          ) : ledger.data?.length ? (
+            <div className="divide-y divide-border">
+
+              {/* Desktop header */}
+              <div className="hidden grid-cols-[1fr_1fr_1.2fr_1fr_1fr] gap-4 border-b border-border bg-muted/30 px-5 py-3 mono text-[10px] uppercase tracking-wider text-muted-foreground sm:grid">
                 <span>Date</span>
-                <span>Total</span>
-                <span>Payment</span>
+                <span>Type</span>
+                <span>Reference</span>
+                <span>Amount</span>
+                <span>Balance</span>
               </div>
 
-              <div className="divide-y divide-border">
-                {customerInvoices.map((invoice) => (
-                  <Link
-                    key={invoice.id}
-                    href={`/invoice/${invoice.invoice_id}`}
-                    className="grid gap-3 px-5 py-4 transition hover:bg-muted/45 sm:grid-cols-[1fr_.8fr_.8fr_120px] sm:items-center"
+              {ledger.data.map((entry, index) => {
+                const isInvoice = entry.type === 'invoice';
+
+                const linkedInvoice =
+                  customerInvoices.find(
+                    (invoice) =>
+                      invoice.invoice_number === entry.reference,
+                  );
+
+                return (
+                  <div
+                    key={`${entry.date}-${entry.reference}-${entry.type}-${index}`}
+                    className="px-5 py-5"
                   >
-                    <div>
-                      <p className="text-sm font-bold">
-                        {invoice.invoice_number}
-                      </p>
+                    <div className="grid gap-4 sm:grid-cols-[1fr_1fr_1.2fr_1fr_1fr] sm:items-center">
 
-                      <p className="mt-1 text-xs text-muted-foreground sm:hidden">
-                        {dateLabel(invoice.created_at)}
-                      </p>
+                      {/* Date */}
+                      <div>
+                        <p className="text-sm font-medium">
+                          {dateLabel(entry.date)}
+                        </p>
+
+                        <p className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground sm:hidden">
+                          Date
+                        </p>
+                      </div>
+
+                      {/* Type */}
+                      <div>
+                        <p
+                          className={`text-sm font-bold ${
+                            isInvoice
+                              ? 'text-foreground'
+                              : 'text-emerald-600'
+                          }`}
+                        >
+                          {isInvoice ? 'Invoice' : 'Payment'}
+                        </p>
+
+                        <p className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground sm:hidden">
+                          Type
+                        </p>
+                      </div>
+
+                      {/* Reference */}
+                      <div>
+                        {linkedInvoice ? (
+                          <Link
+                            href={`/invoice/${linkedInvoice.invoice_id}`}
+                            className="text-sm font-bold hover:underline"
+                          >
+                            {entry.reference}
+                          </Link>
+                        ) : (
+                          <p className="text-sm font-bold">
+                            {entry.reference}
+                          </p>
+                        )}
+
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {entry.description}
+                        </p>
+
+                        <p className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground sm:hidden">
+                          Reference
+                        </p>
+                      </div>
+
+                      {/* Amount */}
+                      <div>
+                        <p
+                          className={`mono text-sm font-bold ${
+                            isInvoice
+                              ? 'text-destructive'
+                              : 'text-emerald-600'
+                          }`}
+                        >
+                          {isInvoice
+                            ? `+ ${money(entry.debit)}`
+                            : `- ${money(entry.credit)}`}
+                        </p>
+
+                        <p className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground sm:hidden">
+                          Amount
+                        </p>
+                      </div>
+
+                      {/* Balance */}
+                      <div>
+                        <p className="mono text-sm font-bold">
+                          {money(entry.balance)}
+                        </p>
+
+                        <p className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground sm:hidden">
+                          Balance
+                        </p>
+                      </div>
+
                     </div>
+                  </div>
+                );
+              })}
 
-                    <span className="hidden text-sm text-muted-foreground sm:block">
-                      {dateLabel(invoice.created_at)}
-                    </span>
-
-                    <span className="mono text-sm">
-                      {money(invoice.total_amount)}
-                    </span>
-
-                    <span className="mono text-[10px] uppercase tracking-wide text-muted-foreground">
-                      {invoice.payment_status}
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            </>
+            </div>
           ) : (
             <EmptyState
-              title="No invoices yet"
-              body={`${customer.name} does not have any invoices yet.`}
+              title="No ledger entries yet"
+              body={`${customer.name} does not have any invoices or payments yet.`}
               action={
                 <Link
                   href="/upload"
@@ -3454,10 +4085,13 @@ function CustomerDetailPage() {
           )}
 
         </SectionCard>
+
       </div>
     </AppShell>
   );
 }
+
+
 
 
 /* ---------------------------------------------------------------------------
