@@ -17,10 +17,17 @@ class Customer(BaseModel):
     # Owner / tenant
     business_id: uuid.UUID
 
+    # Basic retailer information
     name: str
     phone: Optional[str] = None
 
+    # Retailer business information
+    business_name: Optional[str] = None
+    address: Optional[str] = None
+    gst_number: Optional[str] = None
+
     created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
     deleted_at: Optional[datetime] = None
 
     @property

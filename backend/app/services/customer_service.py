@@ -7,7 +7,8 @@ from typing import Optional
 
 from app.models.customer import Customer
 from app.repositories.customer import CustomerRepository
-from app.schemas.customer import CustomerCreate
+from app.schemas.customer import CustomerCreate, CustomerUpdate
+from app.models.stock import utcnow
 
 
 class CustomerNotFoundError(Exception):
@@ -50,9 +51,40 @@ class CustomerService:
             business_id=business_id,
             name=data.name,
             phone=data.phone,
+            business_name=data.business_name,
+            address=data.address,
+            gst_number=data.gst_number,
         )
 
         return self._repository.add(customer)
+
+    def update_customer(
+        self,
+        customer_id: uuid.UUID,
+        data: CustomerUpdate,
+        business_id: uuid.UUID,
+    ) -> Customer:
+
+        customer = self.get_active(
+            customer_id,
+            business_id,
+        )
+
+        if customer is None:
+            raise CustomerNotFoundError(customer_id)
+
+        updates = data.model_dump(
+            exclude_unset=True
+        )
+
+        updated = customer.model_copy(
+            update={
+                **updates,
+                "updated_at": utcnow(),
+            }
+        )
+
+        return self._repository.update(updated)
 
     def get_active(
         self,

@@ -12,13 +12,31 @@ from pydantic import BaseModel, Field
 class CustomerCreate(BaseModel):
     name: str = Field(min_length=1)
     phone: Optional[str] = None
+    business_name: Optional[str] = None
+    address: Optional[str] = None
+    gst_number: Optional[str] = None
+
+
+class CustomerUpdate(BaseModel):
+    name: Optional[str] = Field(
+        default=None,
+        min_length=1,
+    )
+    phone: Optional[str] = None
+    business_name: Optional[str] = None
+    address: Optional[str] = None
+    gst_number: Optional[str] = None
 
 
 class CustomerRead(BaseModel):
     id: uuid.UUID
     name: str
     phone: Optional[str]
+    business_name: Optional[str]
+    address: Optional[str]
+    gst_number: Optional[str]
     created_at: datetime
+    updated_at: datetime
 
     model_config = {"from_attributes": True}
 
@@ -35,3 +53,5 @@ class CustomerSummaryRead(BaseModel):
 
     last_purchase_at: Optional[datetime]
     customer_since: datetime
+
+    model_config = {"from_attributes": True}

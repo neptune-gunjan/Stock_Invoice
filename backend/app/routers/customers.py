@@ -13,7 +13,7 @@ from app.dependencies import (
     get_transaction_service,
 )
 from app.models.user import User
-from app.schemas.customer import (CustomerCreate, CustomerRead, CustomerSummaryRead,)
+from app.schemas.customer import (CustomerCreate, CustomerRead, CustomerSummaryRead, CustomerUpdate,)
 from app.schemas.transaction import TransactionRead
 from app.services.customer_service import (
     CustomerNotFoundError,
@@ -83,6 +83,40 @@ def create_customer(
         business_id=current_user.business_id,
     )
 
+
+@router.patch(
+    "/{customer_id}",
+    response_model=CustomerRead,
+)
+def update_customer(
+    customer_id: uuid.UUID,
+    payload: CustomerUpdate,
+    service: CustomerService = Depends(
+        get_customer_service
+    ),
+    current_user: User = Depends(
+        get_current_user
+    ),
+) -> CustomerRead:
+
+    if current_user.business_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User is not associated with a business.",
+        )
+
+    try:
+        return service.update_customer(
+            customer_id=customer_id,
+            data=payload,
+            business_id=current_user.business_id,
+        )
+
+    except CustomerNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
 
 # ============================================================
 # Customer Transaction History
