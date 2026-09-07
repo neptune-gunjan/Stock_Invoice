@@ -79,6 +79,12 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
 
+    # WhatsApp Cloud API (Meta). Left unset -> WhatsAppClient logs instead of
+    # sending, so the send-invoice flow stays testable without real access.
+    whatsapp_access_token: Optional[str] = None
+    whatsapp_phone_number_id: Optional[str] = None
+    whatsapp_api_version: str = "v21.0"
+
 
 @lru_cache
 def get_settings() -> Settings:

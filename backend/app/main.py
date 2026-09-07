@@ -18,6 +18,7 @@ from app.routers.payment import router as payment_router
 from app.routers.business import router as business_router
 from app.routers.auth import router as auth_router
 from app.routers.dashboard import router as dashboard_router
+from app.routers.whatsapp import router as whatsapp_router
 
 
 app = FastAPI(title="Stock & Invoice Assistant")
@@ -40,6 +41,7 @@ app.include_router(payment_router)
 app.include_router(business_router)
 app.include_router(auth_router)
 app.include_router(dashboard_router)
+app.include_router(whatsapp_router)
 
 os.makedirs("uploads", exist_ok=True)
 

@@ -45,6 +45,8 @@ from app.services.payment_service import PaymentService
 from app.services.stock_service import StockService
 from app.services.transaction_service import TransactionService
 from app.services.dashboard_service import DashboardService
+from app.services.whatsapp_client import WhatsAppClient
+from app.services.whatsapp_service import WhatsAppService
 
 
 # ============================================================
@@ -302,4 +304,44 @@ def get_dashboard_service(
         stock_repository,
         customer_repository,
         payment_repository,
+    )
+
+
+# ============================================================
+# WhatsApp
+# ============================================================
+
+def get_whatsapp_client(
+    settings: Settings = Depends(
+        get_settings
+    ),
+) -> WhatsAppClient:
+
+    return WhatsAppClient(
+        access_token=settings.whatsapp_access_token,
+        phone_number_id=settings.whatsapp_phone_number_id,
+        api_version=settings.whatsapp_api_version,
+    )
+
+
+def get_whatsapp_service(
+    invoice_service: InvoiceService = Depends(
+        get_invoice_service
+    ),
+    customer_service: CustomerService = Depends(
+        get_customer_service
+    ),
+    business_repository: BusinessRepository = Depends(
+        get_business_repository
+    ),
+    client: WhatsAppClient = Depends(
+        get_whatsapp_client
+    ),
+) -> WhatsAppService:
+
+    return WhatsAppService(
+        invoice_service,
+        customer_service,
+        business_repository,
+        client,
     )

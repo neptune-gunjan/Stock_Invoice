@@ -11,6 +11,7 @@ import {
   FilePlus2,
   Filter,
   Loader2,
+  MessageCircle,
   Pencil,
   Plus,
   ReceiptText,
@@ -52,6 +53,7 @@ import {
   type ExtractedItem,
   type StockInput,
   type StockItem,
+  type WhatsAppSendResult,
 } from '@/lib/data';
 import './index.css';
 
@@ -1590,6 +1592,9 @@ function InvoicePage() {
       );
     }
   };
+  const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
+  const [whatsappError, setWhatsappError] = useState('');
+  const [whatsappResult, setWhatsappResult] = useState<WhatsAppSendResult | null>(null);
 
   const customerName = useMemo(() => {
     if (!invoice.data?.customer_id) return null;
@@ -1612,6 +1617,21 @@ function InvoicePage() {
       setPdfError(errorMessage(e, 'PDF download failed.'));
     } finally {
       setDownloading(false);
+    }
+  };
+
+  const sendWhatsapp = async () => {
+    if (!invoiceId) return;
+    setSendingWhatsapp(true);
+    setWhatsappError('');
+    setWhatsappResult(null);
+    try {
+      const result = await endpoints.sendInvoiceWhatsapp(invoiceId);
+      setWhatsappResult(result);
+    } catch (e) {
+      setWhatsappError(errorMessage(e, 'Could not send invoice over WhatsApp.'));
+    } finally {
+      setSendingWhatsapp(false);
     }
   };
 
@@ -1652,8 +1672,16 @@ function InvoicePage() {
           >
             <ArrowLeft size={16} /> Transaction history
           </Link>
-
           <div className="flex flex-wrap gap-2">
+            <button
+              onClick={sendWhatsapp}
+              disabled={sendingWhatsapp}
+              className={buttonQuiet}
+              data-testid="button-send-whatsapp"
+            >
+              <MessageCircle size={16} /> {sendingWhatsapp ? 'Sending…' : 'Send via WhatsApp'}
+            </button>
+
             <button
               onClick={handleCancel}
               disabled={cancel.isPending || data.status === 'cancelled'}
@@ -1684,6 +1712,23 @@ function InvoicePage() {
         {pdfError && (
           <div className="mb-4">
             <ErrorNotice message={pdfError} />
+          </div>
+        )}
+        {whatsappError && (
+          <div className="mb-4">
+            <ErrorNotice message={whatsappError} />
+          </div>
+        )}
+        {whatsappResult && (
+          <div className="mb-4 rounded-xl border border-border bg-muted/35 px-4 py-3 text-sm">
+            {whatsappResult.document_sent ? 'Invoice PDF sent to the customer on WhatsApp.' : 'Could not deliver the PDF over WhatsApp.'}
+            {whatsappResult.payment_link_sent && ' Payment link sent too.'}
+            {!whatsappResult.whatsapp_configured && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                WhatsApp isn't connected yet — this was only logged, not actually sent. Add WHATSAPP_ACCESS_TOKEN /
+                WHATSAPP_PHONE_NUMBER_ID on the backend to send for real.
+              </p>
+            )}
           </div>
         )}
         <PageHeading
