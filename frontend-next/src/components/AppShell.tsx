@@ -6,11 +6,11 @@ import { useProfile } from '@/lib/data';
 
 const nav = [
   { href: '/dashboard', label: 'Overview', icon: BarChart3 },
-  { href: '/upload', label: 'New invoice', icon: FilePlus2 },
-  { href: '/catalog', label: 'Stock catalog', icon: Boxes },
-  { href: '/transactions', label: 'Transactions', icon: History },
-  { href: '/customers', label: 'Customers', icon: Users },
   { href: '/business', label: 'Business', icon: Store },
+  { href: '/catalog', label: 'Stock catalog', icon: Boxes },
+  { href: '/upload', label: 'New invoice', icon: FilePlus2 },
+  { href: '/customers', label: 'Customers', icon: Users },
+  { href: '/transactions', label: 'Transactions', icon: History }, 
 ];
 
 export function Mark({ compact = false }: { compact?: boolean }) {

@@ -181,6 +181,13 @@ class WhatsAppClient:
             )
             return "mock-media-id"
 
+        logger.info(
+            "WhatsApp config: token_present=%s token_length=%s phone_number_id=%s",
+            bool(self._token),
+            len(self._token or ""),
+            self._phone_number_id,
+        )
+
         headers = {
             "Authorization": f"Bearer {self._token}",
         }
