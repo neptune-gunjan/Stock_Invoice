@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     business_data_file: Path = Path("data/business.json")
 
 
+    password_reset_data_file: Path = Path(
+        "data/password_reset_tokens.json"
+    )
+
+
     upload_dir: Path = Path("uploads")
 
     # Which ExtractionProvider implementation to use. See
@@ -81,6 +86,14 @@ class Settings(BaseSettings):
     whatsapp_access_token: Optional[str] = None
     whatsapp_phone_number_id: Optional[str] = None
     whatsapp_api_version: str = "v21.0"
+
+   
+    # Password reset / email
+    resend_api_key: Optional[str] = None
+    resend_from_email: str = "onboarding@resend.dev"
+    frontend_url: str = "http://localhost:5173"
+
+
 
 
 @lru_cache

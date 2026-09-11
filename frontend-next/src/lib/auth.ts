@@ -104,8 +104,12 @@ export async function refreshUser(): Promise<AuthUser> {
   return user;
 }
 
-export async function sendPasswordReset(_email: string): Promise<void> {
-  throw new Error('Password reset is not available yet. Please contact your administrator.');
+export async function sendPasswordReset(email: string): Promise<void> {
+  await apiJson('/auth/forgot-password', {
+    method: 'POST',
+    auth: false,
+    body: { email },
+  });
 }
 
 export function clearSession() {

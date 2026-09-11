@@ -32,6 +32,10 @@ from app.repositories.business import BusinessRepository
 from app.repositories.json_business import JsonFileBusinessRepository
 from app.repositories.user import UserRepository
 from app.repositories.user_json import JsonFileUserRepository
+from app.repositories.password_reset import PasswordResetTokenRepository
+from app.repositories.password_reset_json import (
+    JsonFilePasswordResetTokenRepository,
+)
 
 
 def build_stock_repository(settings: Settings) -> StockRepository:
@@ -161,3 +165,17 @@ def build_user_repository(settings: Settings) -> UserRepository:
 @lru_cache
 def get_user_repository() -> UserRepository:
     return build_user_repository(get_settings())
+
+
+def build_password_reset_repository(
+    settings: Settings,
+) -> PasswordResetTokenRepository:
+    return JsonFilePasswordResetTokenRepository(
+        settings.password_reset_data_file
+    )
+
+
+@lru_cache
+def get_password_reset_repository() -> PasswordResetTokenRepository:
+    return build_password_reset_repository(get_settings())
+

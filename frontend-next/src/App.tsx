@@ -25,12 +25,14 @@ import {
   UserPlus,
   History,
   PackagePlus,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { AppShell, Mark } from '@/components/AppShell';
-import { ApiError } from '@/lib/api';
+import { ApiError, apiJson } from '@/lib/api';
 import { clearSession, hasSession, sendPasswordReset, signIn, signUp } from '@/lib/auth';
 import {
   endpoints,
@@ -179,6 +181,8 @@ function AuthPage() {
   const [values, setValues] = useState({ name: '', shop: '', email: '', password: '', confirmPassword: '' });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
     if (hasSession()) setLocation('/dashboard', { replace: true });
@@ -289,28 +293,58 @@ function AuthPage() {
             </label>
             <label className="block text-sm font-bold">
               Password
-              <input
-                autoComplete={signup ? 'new-password' : 'current-password'}
-                type="password"
-                className={`${inputClass} mt-2`}
-                value={values.password}
-                onChange={(e) => setValues({ ...values, password: e.target.value })}
-                data-testid="input-password"
-                placeholder="8+ characters"
-              />
+
+              <div className="relative mt-2">
+                <input
+                  autoComplete={signup ? 'new-password' : 'current-password'}
+                  type={showPassword ? 'text' : 'password'}
+                  className={`${inputClass} pr-12`}
+                  value={values.password}
+                  onChange={(e) => setValues({ ...values, password: e.target.value })}
+                  data-testid="input-password"
+                  placeholder="8+ characters"
+                />
+
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </label>
             {signup && (
               <label className="block text-sm font-bold">
                 Confirm password
-                <input
-                  autoComplete="new-password"
-                  type="password"
-                  className={`${inputClass} mt-2`}
-                  value={values.confirmPassword}
-                  onChange={(e) => setValues({ ...values, confirmPassword: e.target.value })}
-                  data-testid="input-confirm-password"
-                  placeholder="Repeat your password"
-                />
+
+                <div className="relative mt-2">
+                  <input
+                    autoComplete="new-password"
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    className={`${inputClass} pr-12`}
+                    value={values.confirmPassword}
+                    onChange={(e) =>
+                      setValues({ ...values, confirmPassword: e.target.value })
+                    }
+                    data-testid="input-confirm-password"
+                    placeholder="Repeat your password"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword((prev) => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    aria-label={
+                      showConfirmPassword
+                        ? 'Hide confirm password'
+                        : 'Show confirm password'
+                    }
+                  >
+                    {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </label>
             )}
             {error && (
@@ -355,23 +389,42 @@ function AuthPage() {
   );
 }
 
+
 function ForgotPassword() {
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [busy, setBusy] = useState(false);
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+
+    setError('');
+    setSuccess('');
+    setBusy(true);
+
     try {
-      await sendPasswordReset(email);
+      await sendPasswordReset(email.trim());
+
+      setSuccess(
+        'If an account exists with this email, a password reset link has been sent.'
+      );
     } catch (e) {
-      setError(errorMessage(e, 'Password reset is not available.'));
+      setError(
+        errorMessage(e, 'Unable to send password reset email.')
+      );
+    } finally {
+      setBusy(false);
     }
   };
+
   return (
     <div className="app-shell grid place-items-center bg-background px-5">
       <div className="w-full max-w-[430px]">
         <Link href="/" data-testid="link-back-home">
           <Mark />
         </Link>
+
         <div className="mt-12">
           <Link
             href="/"
@@ -380,14 +433,24 @@ function ForgotPassword() {
           >
             <ArrowLeft size={16} /> Back to sign in
           </Link>
-          <p className="mono mb-3 text-[10px] uppercase tracking-[.2em] text-muted-foreground">Account access</p>
-          <h1 className="text-3xl font-extrabold tracking-[-.04em]">Reset your password.</h1>
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">
-            Self-service reset isn’t available yet. Ask your administrator to set a new password for your account.
+
+          <p className="mono mb-3 text-[10px] uppercase tracking-[.2em] text-muted-foreground">
+            Account access
           </p>
+
+          <h1 className="text-3xl font-extrabold tracking-[-.04em]">
+            Reset your password.
+          </h1>
+
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            Enter the email address associated with your account and we'll
+            send you a secure link to create a new password.
+          </p>
+
           <form onSubmit={submit} className="mt-8">
             <label className="block text-sm font-bold">
               Email address
+
               <input
                 autoComplete="email"
                 className={`${inputClass} mt-2`}
@@ -399,13 +462,38 @@ function ForgotPassword() {
                 data-testid="input-reset-email"
               />
             </label>
+
             {error && (
-              <p className="mt-3 text-sm font-semibold text-destructive" data-testid="text-reset-error">
+              <p
+                className="mt-3 text-sm font-semibold text-destructive"
+                data-testid="text-reset-error"
+              >
                 {error}
               </p>
             )}
-            <button className={`${buttonPrimary} mt-4 w-full`} data-testid="button-send-reset">
-              Notify administrator <ArrowRight size={17} />
+
+            {success && (
+              <p
+                className="mt-3 text-sm font-semibold text-green-600"
+                data-testid="text-reset-success"
+              >
+                {success}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              className={`${buttonPrimary} mt-4 w-full`}
+              disabled={busy}
+              data-testid="button-send-reset"
+            >
+              {busy ? (
+                <Loader2 className="animate-spin" size={17} />
+              ) : null}
+
+              {busy ? 'Sending reset link...' : 'Send reset link'}
+
+              {!busy && <ArrowRight size={17} />}
             </button>
           </form>
         </div>
@@ -413,6 +501,224 @@ function ForgotPassword() {
     </div>
   );
 }
+
+
+function ResetPassword() {
+  const [, setLocation] = useLocation();
+  const token = new URLSearchParams(window.location.search).get('token');
+
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+
+    setError('');
+    setSuccess('');
+
+    if (!token) {
+      setError('Invalid password reset link.');
+      return;
+    }
+
+    if (password.length < 8) {
+      setError('Use at least 8 characters for your password.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    setBusy(true);
+
+    try { await apiJson('/auth/reset-password', { 
+      method: 'POST', 
+      auth: false, 
+      body: { 
+        token, 
+        password, 
+      }, 
+    });
+
+      setSuccess(
+        'Password reset successfully. You can now sign in with your new password.'
+      );
+
+      setPassword('');
+      setConfirmPassword('');
+
+      setTimeout(() => {
+        setLocation('/');
+      }, 1800);
+    } catch (e) {
+      setError(
+        errorMessage(e, 'Unable to reset password. The link may be invalid or expired.'),
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="app-shell grid place-items-center bg-background px-5">
+      <div className="w-full max-w-[430px]">
+        <Link href="/" data-testid="link-reset-home">
+          <Mark />
+        </Link>
+
+        <div className="mt-12">
+
+          <p className="mono mb-3 text-[10px] uppercase tracking-[.2em] text-muted-foreground">
+            Account access
+          </p>
+
+          <h1 className="text-3xl font-extrabold tracking-[-.04em]">
+            Create a new password.
+          </h1>
+
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            Choose a new password for your Stock Invoice account.
+          </p>
+          {!token ? ( 
+            <div className="mt-8"> 
+              <p className="text-sm font-semibold text-destructive"> 
+                This password reset link is invalid. 
+              </p> 
+              <Link 
+                href="/forgot-password" 
+                className={`${buttonPrimary} mt-5 inline-flex w-full justify-center`} 
+              > 
+                Request a new reset link 
+              </Link> 
+            </div> 
+          ) : (
+            <form onSubmit={submit} className="mt-8 space-y-5">
+              <label className="block text-sm font-bold">
+              New password
+
+              <div className="relative mt-2">
+                <input 
+                  autoComplete="new-password" 
+                  className={`${inputClass} pr-12`} 
+                  value={password} onChange={(e) => setPassword(e.target.value)} 
+                  required minLength={8} 
+                  maxLength={72} type={showPassword ? 'text' : 'password'} 
+                  placeholder="Enter new password" 
+                  data-testid="input-new-password" 
+                />
+
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label={
+                    showPassword
+                      ? 'Hide password'
+                      : 'Show password'
+                  }
+                >
+                  {showPassword ? (
+                    <EyeOff size={18} />
+                  ) : (
+                    <Eye size={18} />
+                  )}
+                </button>
+              </div>
+            </label>
+
+            <label className="block text-sm font-bold">
+              Confirm new password
+
+              <div className="relative mt-2">
+                <input
+                  autoComplete="new-password"
+                  className={`${inputClass} pr-12`}
+                  value={confirmPassword}
+                  onChange={(e) =>
+                    setConfirmPassword(e.target.value)
+                  }
+                  required
+                  minLength={8}
+                  maxLength={72}
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  placeholder="Confirm new password"
+                  data-testid="input-confirm-new-password"
+                />
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowConfirmPassword((prev) => !prev)
+                  }
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label={
+                    showConfirmPassword
+                      ? 'Hide confirm password'
+                      : 'Show confirm password'
+                  }
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff size={18} />
+                  ) : (
+                    <Eye size={18} />
+                  )}
+                </button>
+              </div>
+            </label>
+
+            {error && (
+              <p
+                className="text-sm font-semibold text-destructive"
+                data-testid="text-reset-password-error"
+              >
+                {error}
+              </p>
+            )}
+
+            {success && (
+              <p
+                className="text-sm font-semibold text-green-600"
+                data-testid="text-reset-password-success"
+              >
+                {success}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              className={`${buttonPrimary} w-full`}
+              disabled={busy}
+              data-testid="button-reset-password"
+            >
+              {busy ? ( <Loader2 className="animate-spin" size={17} /> ) : null}
+
+              {busy
+                ? 'Resetting password...'
+                : 'Reset password'}
+
+              {!busy && <Check size={17} />}
+            </button>
+          </form>
+        )}
+        <Link 
+          href="/" 
+          className="mt-6 inline-flex items-center gap-2 text-sm font-bold text-muted-foreground hover:text-foreground" 
+        > 
+        <ArrowLeft size={16} /> Back to sign in </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function SalesChart({
   data,
@@ -5644,6 +5950,7 @@ function Routes() {
       <Switch>
         <Route path="/" component={AuthPage} />
         <Route path="/forgot-password" component={ForgotPassword} />
+        <Route path="/reset-password" component={ResetPassword} />
         <Route path="/dashboard">
           <RequireAuth>
             <Dashboard />
