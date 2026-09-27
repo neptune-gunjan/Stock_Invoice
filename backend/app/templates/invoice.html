@@ -1,647 +1,332 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-
+    <title>Invoice {{ invoice_number }}</title>
     <style>
         @page {
             size: A4;
-            margin: 2cm;
+            margin: 0; /* Removing page margins to allow full-width background color */
         }
 
         body {
-            font-family: Helvetica, Arial, sans-serif;
-            color: #1a1a1a;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: #1e293b;
             font-size: 11pt;
             margin: 0;
             padding: 0;
+            line-height: 1.5;
+            background-color: #ffffff;
+        }
+
+        .container {
+            padding: 2cm;
         }
 
         /* =========================
            HEADER
            ========================= */
-
-        .header {
-            margin-bottom: 20px;
+        .header-bg {
+            background-color: #0f172a;
+            color: #ffffff;
+            padding: 2cm;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
         }
 
-        .header h1 {
-            font-size: 22pt;
+        .header-left h1 {
+            font-size: 28pt;
             margin: 0 0 5px 0;
             padding: 0;
+            font-weight: 800;
+            letter-spacing: -0.5px;
         }
 
-        .header p {
-            margin: 2px 0;
-        }
-
-        h1 {
-            font-size: 22pt;
+        .header-left p {
             margin: 0;
-            padding: 0;
+            color: #94a3b8;
+            font-size: 10.5pt;
+            line-height: 1.4;
         }
 
-        .shop-address {
-            color: #555;
-            font-size: 9.5pt;
-            margin-top: 4px;
+        .header-right {
+            text-align: right;
+        }
+
+        .header-right .invoice-title {
+            font-size: 10pt;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #64748b;
+            margin-bottom: 5px;
+        }
+
+        .header-right .invoice-num {
+            font-size: 18pt;
+            font-weight: 700;
+            color: #ffffff;
         }
 
         /* =========================
            INVOICE META
            ========================= */
-
-        .meta-table {
-            width: 100%;
-            margin-top: 24px;
-            margin-bottom: 24px;
-            border-collapse: collapse;
+        .meta-container {
+            margin-top: 30px;
+            display: flex;
+            justify-content: space-between;
         }
 
-        .meta-table td {
-            width: 33.33%;
-            vertical-align: top;
-            padding: 6px 8px 6px 0;
-            font-size: 10pt;
+        .meta-box {
+            width: 30%;
         }
 
-        .meta-table .label {
-            color: #777;
+        .meta-box .label {
+            color: #64748b;
             font-size: 9pt;
-            margin-bottom: 3px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 5px;
+            font-weight: 600;
         }
 
-        .meta-table .value {
-            font-size: 10.5pt;
-            font-weight: bold;
+        .meta-box .value {
+            font-size: 11pt;
+            font-weight: 500;
+            color: #0f172a;
         }
 
         /* =========================
            ITEMS TABLE
            ========================= */
-
         .items-table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 10px;
+            margin-top: 40px;
         }
 
         .items-table th {
             text-align: left;
-            border-bottom: 2px solid #333;
-            padding: 7px 5px;
-            font-size: 9.5pt;
-            color: #333;
+            border-bottom: 2px solid #e2e8f0;
+            padding: 12px 8px;
+            font-size: 9pt;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
         .items-table td {
-            border-bottom: 1px solid #ddd;
-            padding: 7px 5px;
+            border-bottom: 1px solid #f1f5f9;
+            padding: 15px 8px;
             font-size: 10.5pt;
         }
 
         .items-table .num {
             text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .item-name {
+            font-weight: 600;
+            color: #0f172a;
         }
 
         /* =========================
            SUMMARY
            ========================= */
+        .summary-container {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 30px;
+        }
+
+        .summary-notes {
+            width: 50%;
+            color: #64748b;
+            font-size: 9.5pt;
+        }
 
         .summary-table {
-            width: 48%;
-            margin-left: auto;
-            margin-top: 20px;
+            width: 40%;
             border-collapse: collapse;
         }
 
         .summary-table td {
-            padding: 5px 4px;
-            font-size: 10pt;
+            padding: 8px 4px;
+            font-size: 10.5pt;
         }
 
         .summary-table .num {
             text-align: right;
+            font-variant-numeric: tabular-nums;
         }
 
         .summary-table .grand-total td {
-            border-top: 2px solid #333;
-            font-weight: bold;
-            font-size: 12pt;
-            padding-top: 9px;
-        }
-
-        .summary-table .paid td {
-            padding-top: 10px;
-        }
-
-        .summary-table .remaining td {
-            font-weight: bold;
+            border-top: 2px solid #0f172a;
+            font-weight: 800;
+            font-size: 14pt;
+            padding-top: 15px;
+            color: #0f172a;
         }
 
         /* =========================
            PAYMENT INFORMATION
            ========================= */
-
-        .payment-box {
-            margin-top: 25px;
-            padding: 10px;
-            border: 1px solid #ddd;
-            background-color: #f8f8f8;
-        }
-
-        .payment-box-title {
-            font-size: 11pt;
-            font-weight: bold;
-            margin-bottom: 8px;
-        }
-
-        .payment-info-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        .payment-info-table td {
-            padding: 4px;
-            font-size: 10pt;
-        }
-
-        .payment-info-table .label {
-            color: #777;
-        }
-
-        /* =========================
-           PAYMENT HISTORY
-           ========================= */
-
-        .payment-title {
-            font-size: 13pt;
-            margin-top: 28px;
-            margin-bottom: 10px;
-        }
-
-        .payments-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        .payments-table th {
-            text-align: left;
-            border-bottom: 2px solid #333;
-            padding: 6px 4px;
+        .payment-status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 4px;
             font-size: 9pt;
-            color: #333;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-top: 10px;
         }
 
-        .payments-table td {
-            border-bottom: 1px solid #ddd;
-            padding: 6px 4px;
-            font-size: 9pt;
+        .status-paid {
+            background-color: #dcfce7;
+            color: #166534;
         }
-
-        .payments-table .num {
-            text-align: right;
+        
+        .status-due {
+            background-color: #fef9c3;
+            color: #854d0e;
         }
 
         /* =========================
            FOOTER
            ========================= */
-
-        .thank-you {
-            margin-top: 25px;
-            font-size: 9pt;
-            color: #555;
-            text-align: center;
-        }
-
         .footer {
-            margin-top: 40px;
-            padding-top: 10px;
-            border-top: 1px solid #ddd;
-            font-size: 8.5pt;
-            color: #888;
+            margin-top: 60px;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 20px;
             text-align: center;
+            font-size: 9pt;
+            color: #94a3b8;
         }
 
-        /* =========================
-           PRINT SAFETY
-           ========================= */
-
-        tr {
-            page-break-inside: avoid;
-        }
-
-        .items-table,
-        .payments-table {
-            page-break-inside: auto;
-        }
-
-        thead {
-            display: table-header-group;
-        }
     </style>
 </head>
-
 <body>
 
-    <!-- =========================
-         SHOP HEADER
-         ========================= -->
-
-    <div class="header">
-
-        {% if logo_path %}
-            <img
-                src="{{ logo_path }}"
-                alt="{{ business_name }}"
-                style="max-height: 70px; max-width: 180px; margin-bottom: 8px;"
-            >
-        {% endif %}
-
-        <h1>{{ business_name }}</h1>
-
-        {% if owner_name %}
-        <p class="shop-address">
-            Owner: {{ owner_name }}
-        </p>
-        {% endif %}
-
-        {% if business_address %}
-        <p class="shop-address">
-            {{ business_address }}
-        </p>
-        {% endif %}
-
-        {% if business_phone %}
-        <p class="shop-address">
-            Phone: {{ business_phone }}
-        </p>
-        {% endif %}
-
-        {% if business_email %}
-        <p class="shop-address">
-            Email: {{ business_email }}
-        </p>
-        {% endif %}
-
-        {% if gst_number %}
-        <p class="shop-address">
-            GSTIN: {{ gst_number }}
-        </p>
-        {% endif %}
-
+    <div class="header-bg">
+        <div class="header-left">
+            {% if logo_path %}
+                <img src="{{ logo_path }}" alt="Logo" style="max-height: 80px; margin-bottom: 15px; border-radius: 4px;" />
+            {% endif %}
+            <h1>{{ business_name }}</h1>
+            {% if business_address %}
+                <p>{{ business_address }}</p>
+            {% endif %}
+            {% if business_phone %}
+                <p>Phone: {{ business_phone }}</p>
+            {% endif %}
+            {% if gst_number %}
+                <p>GST: {{ gst_number }}</p>
+            {% endif %}
+        </div>
+        <div class="header-right">
+            <div class="invoice-title">Invoice</div>
+            <div class="invoice-num">{{ invoice_number }}</div>
+            {% if payment_status == 'paid' %}
+                <div class="payment-status-badge status-paid">PAID</div>
+            {% else %}
+                <div class="payment-status-badge status-due">DUE</div>
+            {% endif %}
+        </div>
     </div>
 
-    <!-- =========================
-         INVOICE INFORMATION
-         ========================= -->
-
-    <table class="meta-table">
-        <tr>
-
-            <td>
-                <div class="label">
-                    Invoice
-                </div>
-
+    <div class="container">
+        <div class="meta-container">
+            <div class="meta-box">
+                <div class="label">Billed To</div>
                 <div class="value">
-                    {{ invoice_number }}
+                    {{ customer_name if customer_name else "Walk-in Customer" }}
+                    {% if customer_phone %}
+                        <br><span style="font-size: 9pt; color:#64748b">Phone: {{ customer_phone }}</span>
+                    {% endif %}
                 </div>
-            </td>
-
-
-            <td>
-                <div class="label">
-                    Date
-                </div>
-
-                <div class="value">
-                    {{ invoice_date }}
-                </div>
-            </td>
-
-
-            <td>
-                <div class="label">
-                    Customer
-                </div>
-
-                <div class="value">
-                    {{ customer_name or "-" }}
-                </div>
-
-                {% if customer_phone %}
-                    <div>
-                        {{ customer_phone }}
-                    </div>
-                {% endif %}
-            </td>
-
-        </tr>
-    </table>
-
-
-    <!-- =========================
-         ITEMS TABLE
-         ========================= -->
-
-    <table class="items-table">
-
-        <thead>
-            <tr>
-
-                <th>
-                    Item
-                </th>
-
-                <th class="num">
-                    Qty
-                </th>
-
-                <th>
-                    Unit
-                </th>
-
-                <th class="num">
-                    Rate
-                </th>
-
-                <th class="num">
-                    Amount
-                </th>
-
-            </tr>
-        </thead>
-
-
-        <tbody>
-
-            {% for item in items %}
-
-            <tr>
-
-                <td>
-                    {{ item.stock_name }}
-                </td>
-
-                <td class="num">
-                    {{ "%.2f"|format(item.qty) }}
-                </td>
-
-                <td>
-                    {{ item.unit }}
-                </td>
-
-                <td class="num">
-                    Rs. {{ "%.2f"|format(item.unit_price) }}
-                </td>
-
-                <td class="num">
-                    Rs. {{ "%.2f"|format(item.line_total) }}
-                </td>
-
-            </tr>
-
-            {% endfor %}
-
-        </tbody>
-
-    </table>
-
-
-    <!-- =========================
-         BILL SUMMARY
-         ========================= -->
-
-    <table class="summary-table">
-
-        <tr>
-            <td>
-                Subtotal
-            </td>
-
-            <td class="num">
-                Rs. {{ "%.2f"|format(subtotal) }}
-            </td>
-        </tr>
-
-
-        {% if discount and discount > 0 %}
-
-        <tr>
-            <td>
-                Discount
-            </td>
-
-            <td class="num">
-                - Rs. {{ "%.2f"|format(discount) }}
-            </td>
-        </tr>
-
-        {% endif %}
-
-
-        {% if tax_amount and tax_amount > 0 %}
-
-        <tr>
-            <td>
-                Tax ({{ "%.2f"|format(tax_rate) }}%)
-            </td>
-
-            <td class="num">
-                Rs. {{ "%.2f"|format(tax_amount) }}
-            </td>
-        </tr>
-
-        {% endif %}
-
-
-        <tr class="grand-total">
-
-            <td>
-                Grand Total
-            </td>
-
-            <td class="num">
-                Rs. {{ "%.2f"|format(total_amount) }}
-            </td>
-
-        </tr>
-
-
-        <tr class="paid">
-
-            <td>
-                Paid Amount
-            </td>
-
-            <td class="num">
-                Rs. {{ "%.2f"|format(paid_amount) }}
-            </td>
-
-        </tr>
-
-
-        <tr class="remaining">
-
-            <td>
-                Remaining Amount
-            </td>
-
-            <td class="num">
-                Rs. {{ "%.2f"|format(remaining_amount) }}
-            </td>
-
-        </tr>
-
-    </table>
-
-
-    <!-- =========================
-         PAYMENT INFORMATION
-         ========================= -->
-
-    <div class="payment-box">
-
-        <div class="payment-box-title">
-            Payment Information
+            </div>
+            
+            <div class="meta-box">
+                <div class="label">Issue Date</div>
+                <div class="value">{{ invoice_date }}</div>
+            </div>
+
+            <div class="meta-box">
+                <div class="label">Amount Due</div>
+                <div class="value" style="font-size: 13pt; font-weight: 700;">Rs. {{ "%.2f"|format(remaining_amount) }}</div>
+            </div>
         </div>
 
-
-        <table class="payment-info-table">
-
-            <tr>
-
-                <td class="label">
-                    Payment Status
-                </td>
-
-                <td>
-                    {{ payment_status|capitalize if payment_status else "-" }}
-                </td>
-
-            </tr>
-
-
-            <tr>
-
-                <td class="label">
-                    Payment Method
-                </td>
-
-                <td>
-                    {{
-                        payment_method
-                        |replace("_", " ")
-                        |title
-                        if payment_method
-                        else "-"
-                    }}
-                </td>
-
-            </tr>
-
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th>Item Description</th>
+                    <th class="num">Qty</th>
+                    <th class="num">Unit Price</th>
+                    <th class="num">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td>
+                        <span class="item-name">{{ item.stock_name }}</span>
+                    </td>
+                    <td class="num">{{ item.qty }} {{ item.unit }}</td>
+                    <td class="num">Rs. {{ "%.2f"|format(item.unit_price) }}</td>
+                    <td class="num">Rs. {{ "%.2f"|format(item.line_total) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
         </table>
 
-    </div>
+        <div class="summary-container">
+            <div class="summary-notes">
+                <p><strong>Thank you for your business!</strong></p>
+                {% if payment_method %}
+                <p style="margin-top: 15px;">Payment Method: <strong>{{ payment_method|replace("_", " ")|title }}</strong></p>
+                {% endif %}
+            </div>
 
+            <table class="summary-table">
+                <tr>
+                    <td>Subtotal</td>
+                    <td class="num">Rs. {{ "%.2f"|format(subtotal) }}</td>
+                </tr>
+                {% if discount > 0 %}
+                <tr>
+                    <td>Discount</td>
+                    <td class="num">- Rs. {{ "%.2f"|format(discount) }}</td>
+                </tr>
+                {% endif %}
+                {% if tax_amount > 0 %}
+                <tr>
+                    <td>Tax ({{ "%.1f"|format(tax_rate) }}%)</td>
+                    <td class="num">Rs. {{ "%.2f"|format(tax_amount) }}</td>
+                </tr>
+                {% endif %}
+                <tr class="grand-total">
+                    <td>Total</td>
+                    <td class="num">Rs. {{ "%.2f"|format(total_amount) }}</td>
+                </tr>
+                {% if paid_amount > 0 %}
+                <tr>
+                    <td>Amount Paid</td>
+                    <td class="num">- Rs. {{ "%.2f"|format(paid_amount) }}</td>
+                </tr>
+                <tr>
+                    <td><strong>Balance Due</strong></td>
+                    <td class="num"><strong>Rs. {{ "%.2f"|format(remaining_amount) }}</strong></td>
+                </tr>
+                {% endif %}
+            </table>
+        </div>
 
-    <!-- =========================
-         PAYMENT HISTORY
-         ========================= -->
-
-    {% if payments %}
-
-    <h2 class="payment-title">
-        Payment History
-    </h2>
-
-
-    <table class="payments-table">
-
-        <thead>
-
-            <tr>
-
-                <th>
-                    Date
-                </th>
-
-                <th>
-                    Method
-                </th>
-
-                <th>
-                    Reference
-                </th>
-
-                <th class="num">
-                    Amount
-                </th>
-
-            </tr>
-
-        </thead>
-
-
-        <tbody>
-
-            {% for payment in payments %}
-
-            <tr>
-
-                <td>
-                    {{ payment.paid_at.strftime("%Y-%m-%d %H:%M")
-                       if payment.paid_at else "-" }}
-                </td>
-
-
-                <td>
-                    {{
-                        payment.payment_method
-                        |replace("_", " ")
-                        |title
-                        if payment.payment_method
-                        else "-"
-                    }}
-                </td>
-
-
-                <td>
-                    {{ payment.reference_number or "-" }}
-                </td>
-
-
-                <td class="num">
-                    Rs. {{ "%.2f"|format(payment.amount) }}
-                </td>
-
-            </tr>
-
-            {% endfor %}
-
-        </tbody>
-
-    </table>
-
-    {% endif %}
-
-
-    <!-- =========================
-         FOOTER
-         ========================= -->
-
-    <div class="thank-you">
-        Thank you for your business!
-    </div>
-
-
-    <div class="footer">
-        Generated by Stock &amp; Invoice Assistant.
-        No AI was involved in producing this invoice.
+        <div class="footer">
+            Generated securely by Stock & Invoice Assistant. No AI was involved in rendering this document.
+        </div>
     </div>
 
 </body>
 </html>
-

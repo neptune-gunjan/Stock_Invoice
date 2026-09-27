@@ -63,7 +63,7 @@ import {
   type StockMovement,
   type WhatsAppSendResult,
 } from '@/lib/data';
-import './index.css';
+
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -91,20 +91,6 @@ const buttonQuiet =
  * Shared presentational pieces
  * ------------------------------------------------------------------------ */
 
-
-import AuthPage from './pages/AuthPage';
-import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword from './pages/ResetPassword';
-import Dashboard from './pages/Dashboard';
-import UploadPage from './pages/UploadPage';
-import ReviewPage from './pages/ReviewPage';
-import InvoicePage from './pages/InvoicePage';
-import CatalogPage from './pages/CatalogPage';
-import CustomersPage from './pages/CustomersPage';
-import CustomerDetailPage from './pages/CustomerDetailPage';
-import TransactionsPage from './pages/TransactionsPage';
-import BusinessPage from './pages/BusinessPage';
-import NotFound from './pages/NotFound';
 
 function PageHeading({
   eyebrow,
@@ -594,87 +580,118 @@ function PaymentPanel({
 }
 
 
-function RoutedErrorBoundary({ children }: { children: ReactNode }) {
-  const [location] = useLocation();
-  return <ErrorBoundary resetKey={location}>{children}</ErrorBoundary>;
-}
+function ForgotPassword() {
+  const [email, setEmail] = useState('');
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [busy, setBusy] = useState(false);
 
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
 
-function Routes() {
+    setError('');
+    setSuccess('');
+    setBusy(true);
+
+    try {
+      await sendPasswordReset(email.trim());
+
+      setSuccess(
+        'If an account exists with this email, a password reset link has been sent.'
+      );
+    } catch (e) {
+      setError(
+        errorMessage(e, 'Unable to send password reset email.')
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <RoutedErrorBoundary>
-      <Switch>
-        <Route path="/" component={AuthPage} />
-        <Route path="/forgot-password" component={ForgotPassword} />
-        <Route path="/reset-password" component={ResetPassword} />
-        <Route path="/dashboard">
-          <RequireAuth>
-            <Dashboard />
-          </RequireAuth>
-        </Route>
-        <Route path="/upload">
-          <RequireAuth>
-            <UploadPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/review">
-          <RequireAuth>
-            <ReviewPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/invoice/:invoiceId">
-          <RequireAuth>
-            <InvoicePage />
-          </RequireAuth>
-        </Route>
-        <Route path="/catalog">
-          <RequireAuth>
-            <CatalogPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/customers">
-          <RequireAuth>
-            <CustomersPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/business">
-          <RequireAuth>
-            <BusinessPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/customers/:customerId">
-          <RequireAuth>
-            <CustomerDetailPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/transactions">
-          <RequireAuth>
-            <TransactionsPage />
-          </RequireAuth>
-        </Route>
-        <Route component={NotFound} />
-      </Switch>
-    </RoutedErrorBoundary>
+    <div className="app-shell grid place-items-center bg-background px-5">
+      <div className="w-full max-w-[430px]">
+        <Link href="/" data-testid="link-back-home">
+          <Mark />
+        </Link>
+
+        <div className="mt-12">
+          <Link
+            href="/"
+            className="mb-7 inline-flex items-center gap-2 text-sm font-bold text-muted-foreground hover:text-foreground"
+            data-testid="link-back-login"
+          >
+            <ArrowLeft size={16} /> Back to sign in
+          </Link>
+
+          <p className="mono mb-3 text-[10px] uppercase tracking-[.2em] text-muted-foreground">
+            Account access
+          </p>
+
+          <h1 className="text-3xl font-extrabold tracking-[-.04em]">
+            Reset your password.
+          </h1>
+
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            Enter the email address associated with your account and we'll
+            send you a secure link to create a new password.
+          </p>
+
+          <form onSubmit={submit} className="mt-8">
+            <label className="block text-sm font-bold">
+              Email address
+
+              <input
+                autoComplete="email"
+                className={`${inputClass} mt-2`}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                type="email"
+                placeholder="you@yourshop.com"
+                data-testid="input-reset-email"
+              />
+            </label>
+
+            {error && (
+              <p
+                className="mt-3 text-sm font-semibold text-destructive"
+                data-testid="text-reset-error"
+              >
+                {error}
+              </p>
+            )}
+
+            {success && (
+              <p
+                className="mt-3 text-sm font-semibold text-green-600"
+                data-testid="text-reset-success"
+              >
+                {success}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              className={`${buttonPrimary} mt-4 w-full`}
+              disabled={busy}
+              data-testid="button-send-reset"
+            >
+              {busy ? (
+                <Loader2 className="animate-spin" size={17} />
+              ) : null}
+
+              {busy ? 'Sending reset link...' : 'Send reset link'}
+
+              {!busy && <ArrowRight size={17} />}
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
   );
 }
 
-export function logout() {
-  clearSession();
-  location.assign('/');
-}
 
 
-function App() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-          <Routes />
-        </WouterRouter>
-        <Toaster />
-      </TooltipProvider>
-    </QueryClientProvider>
-  );
-}
-
-export default App;
+export default ForgotPassword;

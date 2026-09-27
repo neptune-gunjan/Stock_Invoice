@@ -12,6 +12,9 @@ from app.services.invoice_renderers.xhtml2pdf_renderer import Xhtml2PdfInvoiceRe
 def build_invoice_renderer(settings: Settings) -> InvoiceRenderer:
     if settings.invoice_renderer == "xhtml2pdf":
         return Xhtml2PdfInvoiceRenderer()
+    elif settings.invoice_renderer == "weasyprint":
+        from app.services.invoice_renderers.weasyprint_renderer import WeasyPrintInvoiceRenderer
+        return WeasyPrintInvoiceRenderer()
     raise ValueError(f"Unknown invoice_renderer: {settings.invoice_renderer!r}")
 
 

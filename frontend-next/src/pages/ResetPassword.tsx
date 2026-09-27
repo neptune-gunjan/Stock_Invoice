@@ -63,7 +63,7 @@ import {
   type StockMovement,
   type WhatsAppSendResult,
 } from '@/lib/data';
-import './index.css';
+
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -91,20 +91,6 @@ const buttonQuiet =
  * Shared presentational pieces
  * ------------------------------------------------------------------------ */
 
-
-import AuthPage from './pages/AuthPage';
-import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword from './pages/ResetPassword';
-import Dashboard from './pages/Dashboard';
-import UploadPage from './pages/UploadPage';
-import ReviewPage from './pages/ReviewPage';
-import InvoicePage from './pages/InvoicePage';
-import CatalogPage from './pages/CatalogPage';
-import CustomersPage from './pages/CustomersPage';
-import CustomerDetailPage from './pages/CustomerDetailPage';
-import TransactionsPage from './pages/TransactionsPage';
-import BusinessPage from './pages/BusinessPage';
-import NotFound from './pages/NotFound';
 
 function PageHeading({
   eyebrow,
@@ -594,87 +580,222 @@ function PaymentPanel({
 }
 
 
-function RoutedErrorBoundary({ children }: { children: ReactNode }) {
-  const [location] = useLocation();
-  return <ErrorBoundary resetKey={location}>{children}</ErrorBoundary>;
-}
+function ResetPassword() {
+  const [, setLocation] = useLocation();
+  const token = new URLSearchParams(window.location.search).get('token');
 
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-function Routes() {
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+
+    setError('');
+    setSuccess('');
+
+    if (!token) {
+      setError('Invalid password reset link.');
+      return;
+    }
+
+    if (password.length < 8) {
+      setError('Use at least 8 characters for your password.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    setBusy(true);
+
+    try { await apiJson('/auth/reset-password', { 
+      method: 'POST', 
+      auth: false, 
+      body: { 
+        token, 
+        password, 
+      }, 
+    });
+
+      setSuccess(
+        'Password reset successfully. You can now sign in with your new password.'
+      );
+
+      setPassword('');
+      setConfirmPassword('');
+
+      setTimeout(() => {
+        setLocation('/');
+      }, 1800);
+    } catch (e) {
+      setError(
+        errorMessage(e, 'Unable to reset password. The link may be invalid or expired.'),
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <RoutedErrorBoundary>
-      <Switch>
-        <Route path="/" component={AuthPage} />
-        <Route path="/forgot-password" component={ForgotPassword} />
-        <Route path="/reset-password" component={ResetPassword} />
-        <Route path="/dashboard">
-          <RequireAuth>
-            <Dashboard />
-          </RequireAuth>
-        </Route>
-        <Route path="/upload">
-          <RequireAuth>
-            <UploadPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/review">
-          <RequireAuth>
-            <ReviewPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/invoice/:invoiceId">
-          <RequireAuth>
-            <InvoicePage />
-          </RequireAuth>
-        </Route>
-        <Route path="/catalog">
-          <RequireAuth>
-            <CatalogPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/customers">
-          <RequireAuth>
-            <CustomersPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/business">
-          <RequireAuth>
-            <BusinessPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/customers/:customerId">
-          <RequireAuth>
-            <CustomerDetailPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/transactions">
-          <RequireAuth>
-            <TransactionsPage />
-          </RequireAuth>
-        </Route>
-        <Route component={NotFound} />
-      </Switch>
-    </RoutedErrorBoundary>
+    <div className="app-shell grid place-items-center bg-background px-5">
+      <div className="w-full max-w-[430px]">
+        <Link href="/" data-testid="link-reset-home">
+          <Mark />
+        </Link>
+
+        <div className="mt-12">
+
+          <p className="mono mb-3 text-[10px] uppercase tracking-[.2em] text-muted-foreground">
+            Account access
+          </p>
+
+          <h1 className="text-3xl font-extrabold tracking-[-.04em]">
+            Create a new password.
+          </h1>
+
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            Choose a new password for your Stock Invoice account.
+          </p>
+          {!token ? ( 
+            <div className="mt-8"> 
+              <p className="text-sm font-semibold text-destructive"> 
+                This password reset link is invalid. 
+              </p> 
+              <Link 
+                href="/forgot-password" 
+                className={`${buttonPrimary} mt-5 inline-flex w-full justify-center`} 
+              > 
+                Request a new reset link 
+              </Link> 
+            </div> 
+          ) : (
+            <form onSubmit={submit} className="mt-8 space-y-5">
+              <label className="block text-sm font-bold">
+              New password
+
+              <div className="relative mt-2">
+                <input 
+                  autoComplete="new-password" 
+                  className={`${inputClass} pr-12`} 
+                  value={password} onChange={(e) => setPassword(e.target.value)} 
+                  required minLength={8} 
+                  maxLength={72} type={showPassword ? 'text' : 'password'} 
+                  placeholder="Enter new password" 
+                  data-testid="input-new-password" 
+                />
+
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label={
+                    showPassword
+                      ? 'Hide password'
+                      : 'Show password'
+                  }
+                >
+                  {showPassword ? (
+                    <EyeOff size={18} />
+                  ) : (
+                    <Eye size={18} />
+                  )}
+                </button>
+              </div>
+            </label>
+
+            <label className="block text-sm font-bold">
+              Confirm new password
+
+              <div className="relative mt-2">
+                <input
+                  autoComplete="new-password"
+                  className={`${inputClass} pr-12`}
+                  value={confirmPassword}
+                  onChange={(e) =>
+                    setConfirmPassword(e.target.value)
+                  }
+                  required
+                  minLength={8}
+                  maxLength={72}
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  placeholder="Confirm new password"
+                  data-testid="input-confirm-new-password"
+                />
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowConfirmPassword((prev) => !prev)
+                  }
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label={
+                    showConfirmPassword
+                      ? 'Hide confirm password'
+                      : 'Show confirm password'
+                  }
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff size={18} />
+                  ) : (
+                    <Eye size={18} />
+                  )}
+                </button>
+              </div>
+            </label>
+
+            {error && (
+              <p
+                className="text-sm font-semibold text-destructive"
+                data-testid="text-reset-password-error"
+              >
+                {error}
+              </p>
+            )}
+
+            {success && (
+              <p
+                className="text-sm font-semibold text-green-600"
+                data-testid="text-reset-password-success"
+              >
+                {success}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              className={`${buttonPrimary} w-full`}
+              disabled={busy}
+              data-testid="button-reset-password"
+            >
+              {busy ? ( <Loader2 className="animate-spin" size={17} /> ) : null}
+
+              {busy
+                ? 'Resetting password...'
+                : 'Reset password'}
+
+              {!busy && <Check size={17} />}
+            </button>
+          </form>
+        )}
+        <Link 
+          href="/" 
+          className="mt-6 inline-flex items-center gap-2 text-sm font-bold text-muted-foreground hover:text-foreground" 
+        > 
+        <ArrowLeft size={16} /> Back to sign in </Link>
+        </div>
+      </div>
+    </div>
   );
 }
 
-export function logout() {
-  clearSession();
-  location.assign('/');
-}
 
 
-function App() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-          <Routes />
-        </WouterRouter>
-        <Toaster />
-      </TooltipProvider>
-    </QueryClientProvider>
-  );
-}
-
-export default App;
+export default ResetPassword;

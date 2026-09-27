@@ -82,7 +82,7 @@ async def extract_image(
 
     except ExtractionFailedError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"Extraction failed (job {exc.job_id}): {exc}",
         ) from exc
 

@@ -1,3 +1,5 @@
+import { ReviewPayload } from './ReviewPage';
+
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useMemo, useState, type ChangeEvent, type DragEvent, type FormEvent, type ReactNode } from 'react';
 import { Link, Route, Router as WouterRouter, Switch, useLocation, useParams } from 'wouter';
@@ -63,7 +65,7 @@ import {
   type StockMovement,
   type WhatsAppSendResult,
 } from '@/lib/data';
-import './index.css';
+
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -91,20 +93,6 @@ const buttonQuiet =
  * Shared presentational pieces
  * ------------------------------------------------------------------------ */
 
-
-import AuthPage from './pages/AuthPage';
-import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword from './pages/ResetPassword';
-import Dashboard from './pages/Dashboard';
-import UploadPage from './pages/UploadPage';
-import ReviewPage from './pages/ReviewPage';
-import InvoicePage from './pages/InvoicePage';
-import CatalogPage from './pages/CatalogPage';
-import CustomersPage from './pages/CustomersPage';
-import CustomerDetailPage from './pages/CustomerDetailPage';
-import TransactionsPage from './pages/TransactionsPage';
-import BusinessPage from './pages/BusinessPage';
-import NotFound from './pages/NotFound';
 
 function PageHeading({
   eyebrow,
@@ -594,87 +582,193 @@ function PaymentPanel({
 }
 
 
-function RoutedErrorBoundary({ children }: { children: ReactNode }) {
-  const [location] = useLocation();
-  return <ErrorBoundary resetKey={location}>{children}</ErrorBoundary>;
-}
+function UploadPage() {
+  const [, setLocation] = useLocation();
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [dragging, setDragging] = useState(false);
 
+  const selectFile = (next: File | undefined) => {
+    if (!next) return;
+    if (!next.type.startsWith('image/')) return setError('Please choose an image of the handwritten note.');
+    setError('');
+    setFile(next);
+    setPreview(URL.createObjectURL(next));
+  };
 
-function Routes() {
+  const onDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setDragging(false);
+    selectFile(event.dataTransfer.files[0]);
+  };
+
+  const extract = async () => {
+    if (!file) return;
+    setLoading(true);
+    setError('');
+    try {
+      // 1. Upload image and create extraction job
+      const job = await endpoints.extract(file);
+
+      // 2. Fetch the extraction job using GET /extract/{job_id}
+      const latestJob = await endpoints.getJob(job.id);
+
+      // 3. Use the latest extracted items
+      let items: ExtractedItem[] = latestJob.items;
+
+      // 4. Match extracted items with stock
+      try {
+        items = await endpoints.matchJob(latestJob.id);
+      } catch {
+        // Matching is best-effort.
+        // If matching fails, continue with extracted items.
+      }
+
+      // 5. Store data for Review page
+      const payload: ReviewPayload = {
+        job_id: latestJob.id,
+        items,
+      };
+
+      sessionStorage.setItem(
+        'sia-review',
+        JSON.stringify(payload)
+      );
+
+      // 6. Move to Review page
+      setLocation('/review');
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to process invoice'
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <RoutedErrorBoundary>
-      <Switch>
-        <Route path="/" component={AuthPage} />
-        <Route path="/forgot-password" component={ForgotPassword} />
-        <Route path="/reset-password" component={ResetPassword} />
-        <Route path="/dashboard">
-          <RequireAuth>
-            <Dashboard />
-          </RequireAuth>
-        </Route>
-        <Route path="/upload">
-          <RequireAuth>
-            <UploadPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/review">
-          <RequireAuth>
-            <ReviewPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/invoice/:invoiceId">
-          <RequireAuth>
-            <InvoicePage />
-          </RequireAuth>
-        </Route>
-        <Route path="/catalog">
-          <RequireAuth>
-            <CatalogPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/customers">
-          <RequireAuth>
-            <CustomersPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/business">
-          <RequireAuth>
-            <BusinessPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/customers/:customerId">
-          <RequireAuth>
-            <CustomerDetailPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/transactions">
-          <RequireAuth>
-            <TransactionsPage />
-          </RequireAuth>
-        </Route>
-        <Route component={NotFound} />
-      </Switch>
-    </RoutedErrorBoundary>
+    <AppShell>
+      <PageHeading
+        eyebrow="New invoice"
+        title="Bring the note to the desk."
+        description="Upload a clear photo of the handwritten order. We’ll suggest matches, then you check every line before anything is confirmed."
+      />
+      <div className="mx-auto max-w-4xl">
+        <div className="grid gap-6 lg:grid-cols-[1.1fr_.9fr]">
+          <div>
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragging(true);
+              }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={onDrop}
+              className={`relative flex min-h-[330px] flex-col items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed transition ${
+                dragging ? 'border-primary bg-primary/5' : 'border-border bg-card'
+              } ${preview ? 'p-3' : 'p-8'}`}
+              data-testid="dropzone-upload"
+            >
+              {preview ? (
+                <>
+                  <img
+                    src={preview}
+                    alt="Preview of handwritten note"
+                    className="max-h-[340px] w-full rounded-xl object-contain"
+                    data-testid="img-note-preview"
+                  />
+                  <button
+                    onClick={() => {
+                      setFile(null);
+                      setPreview('');
+                    }}
+                    className="absolute right-5 top-5 grid h-9 w-9 place-items-center rounded-full bg-foreground/75 text-background"
+                    data-testid="button-remove-file"
+                  >
+                    <X size={17} />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="mb-5 grid h-16 w-16 place-items-center rounded-2xl bg-secondary/30 text-primary">
+                    <UploadCloud size={28} />
+                  </div>
+                  <h2 className="text-lg font-extrabold">Drop the note here</h2>
+                  <p className="mt-2 text-center text-sm text-muted-foreground">
+                    A straight-on photo with good light works best.
+                  </p>
+                  <label className={`${buttonQuiet} mt-6 cursor-pointer`}>
+                    <FileImage size={16} /> Browse image
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="sr-only"
+                      onChange={(e: ChangeEvent<HTMLInputElement>) => selectFile(e.target.files?.[0])}
+                      data-testid="input-note-file"
+                    />
+                  </label>
+                </>
+              )}
+            </div>
+            {error && (
+              <div className="mt-4">
+                <ErrorNotice message={error} onRetry={() => setError('')} />
+              </div>
+            )}
+          </div>
+          <SectionCard className="h-fit p-6">
+            <p className="mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">Before you continue</p>
+            <h2 className="mt-3 text-xl font-extrabold tracking-[-.03em]">A careful first pass.</h2>
+            <div className="mt-6 space-y-5">
+              {[
+                ['01', 'One note at a time', 'Keep the whole page in frame, with no fingers over the writing.'],
+                ['02', 'Suggestions, not guesses', 'Matches and prices are always shown for your review.'],
+                ['03', 'You stay in control', 'Nothing changes in your stock or sales until you confirm.'],
+              ].map(([number, title, body]) => (
+                <div className="flex gap-3" key={number}>
+                  <span className="mono mt-0.5 text-[10px] text-secondary-foreground">{number}</span>
+                  <div>
+                    <p className="text-sm font-bold">{title}</p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">{body}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button onClick={extract} disabled={!file || loading} className={`${buttonPrimary} mt-8 w-full`} data-testid="button-extract">
+              {loading ? (
+                <>
+                  <Loader2 className="animate-spin" size={16} /> Reading note…
+                </>
+              ) : (
+                <>
+                  Read this note <ArrowRight size={17} />
+                </>
+              )}
+            </button>
+          </SectionCard>
+        </div>
+      </div>
+    </AppShell>
   );
 }
 
-export function logout() {
-  clearSession();
-  location.assign('/');
+/* ---------------------------------------------------------------------------
+ * Review → Confirm
+ * ------------------------------------------------------------------------ */
+
+interface ReviewRow {
+  id: string;
+  raw_text: string;
+  stock_id: string | null;
+  qty: number;
+  extracted_item_id: string | null;
 }
 
+const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
-function App() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-          <Routes />
-        </WouterRouter>
-        <Toaster />
-      </TooltipProvider>
-    </QueryClientProvider>
-  );
-}
 
-export default App;
+
+export default UploadPage;

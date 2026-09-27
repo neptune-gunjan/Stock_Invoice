@@ -41,6 +41,9 @@ from app.repositories.password_reset_json import (
 def build_stock_repository(settings: Settings) -> StockRepository:
     if settings.stock_storage_backend == "json_file":
         return JsonFileStockRepository(settings.stock_data_file)
+    elif settings.stock_storage_backend == "postgres":
+        from app.repositories.stock_sql import SqlAlchemyStockRepository
+        return SqlAlchemyStockRepository()
     raise ValueError(f"Unknown stock_storage_backend: {settings.stock_storage_backend!r}")
 
 
@@ -56,6 +59,9 @@ def build_extraction_repository(settings: Settings) -> ExtractionRepository:
         return JsonFileExtractionRepository(
             settings.extraction_jobs_data_file, settings.extracted_items_data_file
         )
+    elif settings.extraction_storage_backend == "postgres":
+        from app.repositories.extraction_sql import SqlAlchemyExtractionRepository
+        return SqlAlchemyExtractionRepository()
     raise ValueError(f"Unknown extraction_storage_backend: {settings.extraction_storage_backend!r}")
 
 
@@ -69,11 +75,17 @@ def build_transaction_repository(settings: Settings) -> TransactionRepository:
         return JsonFileTransactionRepository(
             settings.transaction_data_file, settings.transaction_items_data_file
         )
+    elif settings.transaction_storage_backend == "postgres":
+        from app.repositories.transaction_sql import SqlAlchemyTransactionRepository
+        return SqlAlchemyTransactionRepository()
     raise ValueError(f"Unknown transaction_storage_backend: {settings.transaction_storage_backend!r}")
 
 def build_invoice_repository(settings: Settings) -> InvoiceRepository:
     if settings.invoice_storage_backend == "json_file":
         return JsonFileInvoiceRepository(settings.invoice_data_file)
+    elif settings.invoice_storage_backend == "postgres":
+        from app.repositories.invoice_sql import SqlAlchemyInvoiceRepository
+        return SqlAlchemyInvoiceRepository()
 
     raise ValueError(
         f"Unknown invoice_storage_backend: {settings.invoice_storage_backend!r}"
@@ -96,6 +108,9 @@ def build_stock_movement_repository(
         return JsonFileStockMovementRepository(
             settings.stock_movement_data_file
         )
+    elif settings.stock_movement_storage_backend == "postgres":
+        from app.repositories.stock_movement_sql import SqlAlchemyStockMovementRepository
+        return SqlAlchemyStockMovementRepository()
 
     raise ValueError(
         f"Unknown stock_movement_storage_backend: "
@@ -109,6 +124,9 @@ def get_stock_movement_repository() -> StockMovementRepository:
 def build_customer_repository(settings: Settings) -> CustomerRepository:
     if settings.customer_storage_backend == "json_file":
         return JsonFileCustomerRepository(settings.customer_data_file)
+    elif settings.customer_storage_backend == "postgres":
+        from app.repositories.customer_sql import SqlAlchemyCustomerRepository
+        return SqlAlchemyCustomerRepository()
     raise ValueError(f"Unknown customer_storage_backend: {settings.customer_storage_backend!r}")
 
 
@@ -123,6 +141,9 @@ def build_payment_repository(
         return JsonFilePaymentRepository(
             settings.payment_data_file
         )
+    elif settings.payment_storage_backend == "postgres":
+        from app.repositories.payment_sql import SqlAlchemyPaymentRepository
+        return SqlAlchemyPaymentRepository()
 
     raise ValueError(
         f"Unknown payment_storage_backend: "
@@ -139,6 +160,9 @@ def build_business_repository(settings: Settings) -> BusinessRepository:
         return JsonFileBusinessRepository(
             settings.business_data_file
         )
+    elif settings.business_storage_backend == "postgres":
+        from app.repositories.business_sql import SqlAlchemyBusinessRepository
+        return SqlAlchemyBusinessRepository()
 
     raise ValueError(
         f"Unknown business_storage_backend: "
@@ -155,6 +179,9 @@ def build_user_repository(settings: Settings) -> UserRepository:
         return JsonFileUserRepository(
             settings.user_data_file
         )
+    elif settings.user_storage_backend == "postgres":
+        from app.repositories.user_sql import SqlAlchemyUserRepository
+        return SqlAlchemyUserRepository()
 
     raise ValueError(
         f"Unknown user_storage_backend: "
@@ -170,6 +197,10 @@ def get_user_repository() -> UserRepository:
 def build_password_reset_repository(
     settings: Settings,
 ) -> PasswordResetTokenRepository:
+    if getattr(settings, "password_reset_storage_backend", "json_file") == "postgres":
+        from app.repositories.password_reset_sql import SqlAlchemyPasswordResetTokenRepository
+        return SqlAlchemyPasswordResetTokenRepository()
+    
     return JsonFilePasswordResetTokenRepository(
         settings.password_reset_data_file
     )

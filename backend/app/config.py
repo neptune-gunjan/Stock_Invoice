@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     # app/services/extraction_providers/factory.py -- this is the ONLY
     # component in the app allowed to call an LLM (docs/phase2-extraction.md).
     extraction_provider: str = "groq"
+    anthropic_api_key: Optional[str] = None
     groq_api_key: Optional[str] = None
     groq_vision_model: str = "qwen/qwen3.6-27b"
 

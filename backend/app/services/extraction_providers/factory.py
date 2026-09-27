@@ -16,6 +16,11 @@ def build_extraction_provider(settings: Settings) -> ExtractionProvider:
             api_key=settings.groq_api_key or "",
             model=settings.groq_vision_model,
         )
+    elif settings.extraction_provider == "claude":
+        from app.services.extraction_providers.claude import ClaudeExtractionProvider
+        return ClaudeExtractionProvider(
+            api_key=settings.anthropic_api_key or "",
+        )
     raise ValueError(f"Unknown extraction_provider: {settings.extraction_provider!r}")
 
 
