@@ -254,7 +254,7 @@
 
             <div class="meta-box">
                 <div class="label">Amount Due</div>
-                <div class="value" style="font-size: 13pt; font-weight: 700;">Rs. {{ "%.2f"|format(remaining_amount) }}</div>
+                <div class="value" style="font-size: 13pt; font-weight: 700;">Rs. {{ "%.2f"|format(closing_balance if customer_name else remaining_amount) }}</div>
             </div>
         </div>
 
@@ -307,17 +307,38 @@
                 </tr>
                 {% endif %}
                 <tr class="grand-total">
-                    <td>Total</td>
+                    <td>Current Bill Total</td>
                     <td class="num">Rs. {{ "%.2f"|format(total_amount) }}</td>
                 </tr>
+                {% if customer_name %}
+                {% if previous_balance > 0 %}
+                <tr>
+                    <td>Previous Khata Balance</td>
+                    <td class="num">Rs. {{ "%.2f"|format(previous_balance) }}</td>
+                </tr>
+                <tr>
+                    <td>Total Outstandings</td>
+                    <td class="num">Rs. {{ "%.2f"|format(previous_balance + total_amount) }}</td>
+                </tr>
+                {% endif %}
                 {% if paid_amount > 0 %}
+                <tr>
+                    <td>Amount Paid Today</td>
+                    <td class="num">- Rs. {{ "%.2f"|format(paid_amount) }}</td>
+                </tr>
+                {% endif %}
+                <tr style="border-top: 2px solid #0f172a; font-weight: 800; font-size: 12pt; color: #0f172a;">
+                    <td>Net Balance Due</td>
+                    <td class="num">Rs. {{ "%.2f"|format(closing_balance) }}</td>
+                </tr>
+                {% elif paid_amount > 0 %}
                 <tr>
                     <td>Amount Paid</td>
                     <td class="num">- Rs. {{ "%.2f"|format(paid_amount) }}</td>
                 </tr>
-                <tr>
-                    <td><strong>Balance Due</strong></td>
-                    <td class="num"><strong>Rs. {{ "%.2f"|format(remaining_amount) }}</strong></td>
+                <tr style="border-top: 1.5px solid #0f172a; font-weight: 800;">
+                    <td>Balance Due</td>
+                    <td class="num">Rs. {{ "%.2f"|format(remaining_amount) }}</td>
                 </tr>
                 {% endif %}
             </table>

@@ -87,6 +87,7 @@ own doc in `/docs` with functional detail, acceptance criteria, and out-of-scope
 4. **Phase 4 — Human Review UI** (`docs/phase4-review.md`)
 5. **Phase 5 — Deterministic Invoice PDF** (`docs/phase5-invoice.md`)
 6. **Phase 6 — Customers & Transaction History** (`docs/phase6-history.md`)
+7. **Phase 7 — Pro Wholesale Features** (`docs/phase7-pro-features.md`)
 
 ## 7. MVP scope for the first working demo
 

@@ -2,8 +2,11 @@ export interface ReviewRow {
   id: string;
   stock_id: string | null;
   qty: number;
+  unit_price: number | null;    // null = use catalog price
+  line_discount: number;        // per-line trade discount amount
   extracted_item_id: string | null;
   raw_text?: string;
+  itemSearch: string;           // combobox search text for this row
 }
 
 export interface ReviewPayload {
@@ -15,7 +18,7 @@ export const isUuid = (val: any) => typeof val === 'string' && /^[0-9a-f]{8}-[0-
 
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useEffect, useMemo, useState, type ChangeEvent, type DragEvent, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent, type ReactNode } from 'react';
 import { Link, Route, Router as WouterRouter, Switch, useLocation, useParams } from 'wouter';
 import {
   AlertCircle,
@@ -28,6 +31,7 @@ import {
   Filter,
   Loader2,
   MessageCircle,
+  MessageSquare,
   Pencil,
   Plus,
   ReceiptText,
@@ -35,6 +39,7 @@ import {
   ShieldCheck,
   Trash2,
   UploadCloud,
+  Wallet,
   X,
   Save,
   Store,
@@ -78,6 +83,7 @@ import {
   type StockItem,
   type StockMovement,
   type WhatsAppSendResult,
+  type CustomerSummary,
 } from '@/lib/data';
 
 
@@ -596,6 +602,191 @@ function PaymentPanel({
 }
 
 
+/* ---------------------------------------------------------------------------
+ * ItemCombobox — searchable catalog picker for each billing row
+ * Replaces the plain <select> with a keyboard-navigable search box.
+ * Features:
+ *   - Type to instantly filter catalog items by name / SKU
+ *   - Shows stock qty + price in the dropdown
+ *   - ArrowUp/Down + Enter for keyboard navigation
+ *   - Escape to close, click-outside to close
+ * ------------------------------------------------------------------------ */
+
+interface ItemComboboxProps {
+  stockItems: StockItem[];
+  selectedStockId: string | null;
+  searchText: string;
+  needsReview: boolean;
+  onSelect: (item: StockItem | null) => void;
+  onSearchChange: (text: string) => void;
+  'data-testid'?: string;
+}
+
+function ItemCombobox({
+  stockItems,
+  selectedStockId,
+  searchText,
+  needsReview,
+  onSelect,
+  onSearchChange,
+  'data-testid': testId,
+}: ItemComboboxProps) {
+  const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // Compute the display label for the selected item
+  const selectedItem = selectedStockId
+    ? stockItems.find((s) => s.id === selectedStockId) ?? null
+    : null;
+
+  // Filter the catalog
+  const filtered = useMemo(() => {
+    const q = searchText.trim().toLowerCase();
+    if (!q) return stockItems.slice(0, 40); // Show first 40 when empty
+    return stockItems.filter((s) =>
+      s.name.toLowerCase().includes(q) ||
+      (s.sku ?? '').toLowerCase().includes(q),
+    ).slice(0, 40);
+  }, [stockItems, searchText]);
+
+  // Reset active index when filtered list changes
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [searchText]);
+
+  // Scroll active item into view
+  useEffect(() => {
+    const el = listRef.current?.querySelector(`[data-idx="${activeIndex}"]`) as HTMLElement | null;
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [activeIndex]);
+
+  const selectItem = (item: StockItem) => {
+    onSelect(item);
+    onSearchChange(item.name);
+    setOpen(false);
+  };
+
+  const clearItem = () => {
+    onSelect(null);
+    onSearchChange('');
+    setOpen(false);
+    inputRef.current?.focus();
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!open) {
+      if (e.key === 'ArrowDown' || e.key === 'Enter') {
+        setOpen(true);
+        e.preventDefault();
+      }
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      setActiveIndex((i) => Math.min(i + 1, filtered.length - 1));
+      e.preventDefault();
+    } else if (e.key === 'ArrowUp') {
+      setActiveIndex((i) => Math.max(i - 1, 0));
+      e.preventDefault();
+    } else if (e.key === 'Enter') {
+      if (filtered[activeIndex]) {
+        selectItem(filtered[activeIndex]);
+      }
+      e.preventDefault();
+    } else if (e.key === 'Escape') {
+      setOpen(false);
+      e.preventDefault();
+    } else if (e.key === 'Tab') {
+      setOpen(false);
+    }
+  };
+
+  return (
+    <div className="relative">
+      <div className={`flex items-center gap-1 rounded-xl border ${needsReview ? 'border-secondary-foreground/50' : 'border-input'} bg-card transition focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10`}>
+        <input
+          ref={inputRef}
+          type="text"
+          className="min-h-11 flex-1 bg-transparent px-3 text-sm outline-none"
+          value={searchText}
+          placeholder="Search item…"
+          autoComplete="off"
+          data-testid={testId}
+          onFocus={() => setOpen(true)}
+          onBlur={(e) => {
+            // Close unless clicking inside the dropdown
+            if (!listRef.current?.contains(e.relatedTarget as Node)) {
+              setOpen(false);
+              // If user typed something but didn't pick — restore the old name or clear
+              if (!selectedStockId) {
+                onSearchChange('');
+              } else {
+                onSearchChange(selectedItem?.name ?? '');
+              }
+            }
+          }}
+          onChange={(e) => {
+            onSearchChange(e.target.value);
+            setOpen(true);
+            if (!e.target.value) onSelect(null);
+          }}
+          onKeyDown={handleKeyDown}
+        />
+        {selectedStockId && (
+          <button
+            type="button"
+            onMouseDown={(e) => { e.preventDefault(); clearItem(); }}
+            className="mr-2 grid h-5 w-5 shrink-0 place-items-center rounded text-muted-foreground hover:text-foreground"
+            tabIndex={-1}
+            title="Clear selection"
+          >
+            <X size={12} />
+          </button>
+        )}
+      </div>
+
+      {open && (
+        <div
+          ref={listRef}
+          className="absolute left-0 right-0 z-30 mt-1 max-h-56 overflow-auto rounded-xl border border-border bg-card shadow-xl"
+          onMouseDown={(e) => e.preventDefault()} // Prevent blur when clicking list
+        >
+          {filtered.length === 0 ? (
+            <p className="px-3 py-4 text-xs text-muted-foreground">No items match "{searchText}"</p>
+          ) : (
+            filtered.map((item, idx) => (
+              <button
+                key={item.id}
+                type="button"
+                data-idx={idx}
+                onClick={() => selectItem(item)}
+                className={`flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm hover:bg-muted ${
+                  idx === activeIndex ? 'bg-muted' : ''
+                } ${selectedStockId === item.id ? 'text-primary' : ''}`}
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">{item.name}</p>
+                  {item.sku && (
+                    <p className="mono text-[10px] text-muted-foreground">{item.sku}</p>
+                  )}
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="mono text-xs font-semibold">{money(item.unit_price)}</p>
+                  <p className={`text-[10px] ${item.quantity_available <= 0 ? 'text-red-500' : item.quantity_available <= 5 ? 'text-amber-500' : 'text-muted-foreground'}`}>
+                    {item.quantity_available} {item.unit}
+                  </p>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function ReviewPage() {
   const [, setLocation] = useLocation();
   const stock = useStock();
@@ -613,6 +804,12 @@ function ReviewPage() {
   const [showCustomerResults, setShowCustomerResults] = useState(false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [paidToday, setPaidToday] = useState<number | ''>('');
+  const [paymentMethod, setPaymentMethod] = useState<string>('cash');
+  const [showWhatsApp, setShowWhatsApp] = useState(false);
+  const [whatsAppText, setWhatsAppText] = useState('');
+  const [whatsAppParsing, setWhatsAppParsing] = useState(false);
+  const [customerSummary, setCustomerSummary] = useState<CustomerSummary | null>(null);
 
   useEffect(() => {
     try {
@@ -629,7 +826,10 @@ function ReviewPage() {
             raw_text: item.raw_text,
             stock_id: item.matched_stock_id,
             qty: item.qty && item.qty > 0 ? item.qty : 1,
+            unit_price: null,
+            line_discount: 0,
             extracted_item_id: isUuid(item.id) ? item.id : null,
+            itemSearch: item.matched_stock_name ?? item.raw_text ?? '',
           })),
         );
       } else {
@@ -639,7 +839,10 @@ function ReviewPage() {
             raw_text: '',
             stock_id: null,
             qty: 1,
+            unit_price: null,
+            line_discount: 0,
             extracted_item_id: null,
+            itemSearch: '',
           },
         ]);
       }
@@ -673,12 +876,14 @@ function ReviewPage() {
   }, [customers.data, customerSearch]);
 
   const priceFor = (row: ReviewRow) =>
-    row.stock_id
-      ? stockById.get(row.stock_id)?.unit_price ?? 0
-      : 0;
+    row.unit_price != null
+      ? row.unit_price
+      : row.stock_id
+        ? stockById.get(row.stock_id)?.unit_price ?? 0
+        : 0;
 
   const total = rows.reduce(
-    (sum, row) => sum + row.qty * priceFor(row),
+    (sum, row) => sum + row.qty * priceFor(row) - (row.line_discount ?? 0),
     0,
   );
 
@@ -697,9 +902,84 @@ function ReviewPage() {
         raw_text: '',
         stock_id: null,
         qty: 1,
+        unit_price: null,
+        line_discount: 0,
         extracted_item_id: null,
+        itemSearch: '',
       },
     ]);
+
+  // -----------------------------------------------------------------------
+  // Barcode Scanner Integration
+  // -----------------------------------------------------------------------
+  
+  useEffect(() => {
+    let barcode = '';
+    let lastKeyTime = Date.now();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const currentTime = Date.now();
+      
+      // Typical scanner types a character every 5-20ms. Human types at >50ms.
+      // Reset if more than 35ms passes between keystrokes.
+      if (currentTime - lastKeyTime > 35) {
+        barcode = '';
+      }
+      
+      if (e.key === 'Enter' && barcode.length >= 3) {
+        e.preventDefault();
+        
+        // Find item by SKU (case insensitive) or exactly by ID
+        const matchedItem = (stock.data ?? []).find(s => 
+          (s.sku && s.sku.toLowerCase() === barcode.toLowerCase()) || 
+          s.id === barcode
+        );
+        
+        if (matchedItem) {
+          setRows((current) => {
+            // If item already exists in rows, increment quantity
+            const existingRowIndex = current.findIndex(r => r.stock_id === matchedItem.id);
+            if (existingRowIndex >= 0) {
+              const newRows = [...current];
+              newRows[existingRowIndex] = {
+                ...newRows[existingRowIndex],
+                qty: newRows[existingRowIndex].qty + 1
+              };
+              return newRows;
+            }
+            
+            // Otherwise, add a new row (or replace the empty initial row)
+            const isFirstRowEmpty = current.length === 1 && !current[0].stock_id && !current[0].itemSearch;
+            
+            const newRow: ReviewRow = {
+              id: `barcode-${Date.now()}`,
+              raw_text: matchedItem.name,
+              stock_id: matchedItem.id,
+              qty: 1,
+              unit_price: null,
+              line_discount: 0,
+              extracted_item_id: null,
+              itemSearch: matchedItem.name,
+            };
+            
+            if (isFirstRowEmpty) {
+              return [newRow];
+            }
+            return [...current, newRow];
+          });
+        }
+        
+        barcode = '';
+      } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        barcode += e.key;
+      }
+      
+      lastKeyTime = currentTime;
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [stock.data]);
 
   const selectCustomer = (item: Customer) => {
     setCustomer({
@@ -710,6 +990,9 @@ function ReviewPage() {
 
     setCustomerSearch('');
     setShowCustomerResults(false);
+
+    // Fetch their outstanding Khata balance
+    endpoints.customerSummary(item.id).then((s) => setCustomerSummary(s)).catch(() => {});
   };
 
   const clearCustomer = () => {
@@ -720,7 +1003,44 @@ function ReviewPage() {
     });
 
     setCustomerSearch('');
+    setCustomerSummary(null);
   };
+
+  /* -----------------------------------------------------------------------
+   * WhatsApp order paste handler
+   * --------------------------------------------------------------------- */
+
+  const handleWhatsAppPaste = async () => {
+    const text = whatsAppText.trim();
+    if (!text) return;
+
+    setWhatsAppParsing(true);
+    try {
+      const matched = await endpoints.matchText(text);
+      setRows(
+        matched.map((item) => ({
+          id: item.id,
+          raw_text: item.raw_text,
+          stock_id: item.matched_stock_id ?? null,
+          qty: item.qty && item.qty > 0 ? item.qty : 1,
+          unit_price: null,
+          line_discount: 0,
+          extracted_item_id: null,
+          itemSearch: item.matched_stock_name ?? item.raw_text ?? '',
+        })),
+      );
+      setShowWhatsApp(false);
+      setWhatsAppText('');
+    } catch (e) {
+      setError(errorMessage(e, 'Could not parse the WhatsApp order text.'));
+    } finally {
+      setWhatsAppParsing(false);
+    }
+  };
+
+  /* -----------------------------------------------------------------------
+   * Confirm / create invoice
+   * --------------------------------------------------------------------- */
 
   const confirm = async () => {
     if (rows.length === 0) {
@@ -735,9 +1055,9 @@ function ReviewPage() {
       return;
     }
 
-    if (rows.some((row) => !row.qty || row.qty <= 0)) {
+    if (rows.some((row) => row.qty === 0 || isNaN(row.qty))) {
       setError(
-        'Quantity must be greater than 0 on every row.',
+        'Quantity cannot be zero. Use negative numbers for returns.',
       );
       return;
     }
@@ -796,9 +1116,20 @@ function ReviewPage() {
         items: rows.map((row) => ({
           stock_id: row.stock_id as string,
           qty: row.qty,
+          unit_price: row.unit_price ?? undefined,
+          discount: row.line_discount > 0 ? row.line_discount : undefined,
           extracted_item_id:
             row.extracted_item_id ?? undefined,
         })),
+
+        initial_payment_amount:
+          paidToday !== '' && Number(paidToday) > 0
+            ? Number(paidToday)
+            : null,
+        initial_payment_method:
+          paidToday !== '' && Number(paidToday) > 0
+            ? paymentMethod
+            : null,
       });
 
       sessionStorage.removeItem('sia-review');
@@ -821,9 +1152,10 @@ function ReviewPage() {
          * Header
          * --------------------------------------------------------- */}
 
+        {/* Context-aware breadcrumb: Quick Bill vs. photo-extracted review */}
         <div className="mb-7 flex items-center gap-3">
           <Link
-            href="/upload"
+            href={jobId ? '/upload' : '/dashboard'}
             className="grid h-10 w-10 place-items-center rounded-xl border border-border bg-card hover:bg-muted"
             data-testid="link-back-upload"
           >
@@ -832,28 +1164,44 @@ function ReviewPage() {
 
           <div>
             <p className="mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">
-              Step 2 of 3
+              {jobId ? 'Step 2 of 3' : '⚡ Quick Bill'}
             </p>
 
             <p className="text-sm font-bold">
-              Check the details
+              {jobId ? 'Check the details' : 'New counter sale'}
             </p>
           </div>
         </div>
 
         <PageHeading
-          eyebrow="Human review"
-          title="Does this look right?"
-          description="Prices come from your catalog. Check the highlighted rows and pick a match before confirming."
+          eyebrow={jobId ? 'Human review' : 'Quick Bill'}
+          title={jobId ? 'Does this look right?' : 'New Bill'}
+          description={
+            jobId
+              ? 'Prices come from your catalog. Edit rates if needed, then confirm.'
+              : 'Search and add items below. Edit rates, record payment, then confirm.'
+          }
           action={
-            <button
-              onClick={addRow}
-              className={buttonQuiet}
-              data-testid="button-add-review-item"
-            >
-              <Plus size={17} />
-              Add item
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowWhatsApp(true)}
+                className={buttonQuiet}
+                title="Paste WhatsApp order"
+              >
+                <MessageSquare size={15} />
+                WhatsApp order
+              </button>
+
+              <button
+                onClick={addRow}
+                className={buttonQuiet}
+                data-testid="button-add-review-item"
+              >
+                <Plus size={17} />
+                Add item
+              </button>
+            </div>
           }
         />
 
@@ -885,11 +1233,11 @@ function ReviewPage() {
 
         <SectionCard className="overflow-hidden">
 
-          <div className="hidden grid-cols-[1.1fr_1.4fr_.55fr_.7fr_.8fr_40px] gap-3 border-b border-border bg-muted/45 px-5 py-3 mono text-[10px] uppercase tracking-wider text-muted-foreground md:grid">
+          <div className="hidden grid-cols-[1.1fr_1.4fr_.55fr_.9fr_.8fr_40px] gap-3 border-b border-border bg-muted/45 px-5 py-3 mono text-[10px] uppercase tracking-wider text-muted-foreground md:grid">
             <span>Written as</span>
             <span>Catalog match</span>
             <span>Qty</span>
-            <span>Rate</span>
+            <span>Rate ✎</span>
             <span className="text-right">Line total</span>
             <span />
           </div>
@@ -917,7 +1265,7 @@ function ReviewPage() {
               return (
                 <div
                   key={row.id}
-                  className={`grid gap-4 px-4 py-5 md:grid-cols-[1.1fr_1.4fr_.55fr_.7fr_.8fr_40px] md:items-center md:gap-3 md:px-5 ${
+                  className={`grid gap-4 px-4 py-5 md:grid-cols-[1.1fr_1.4fr_.55fr_.9fr_.8fr_40px] md:items-center md:gap-3 md:px-5 ${
                     needsReview
                       ? 'bg-secondary/10'
                       : ''
@@ -955,36 +1303,25 @@ function ReviewPage() {
                     </div>
                   </div>
 
-                  {/* Catalog match */}
+                  {/* Catalog match — searchable combobox */}
 
-                  <select
-                    className={`${inputClass} ${
-                      needsReview
-                        ? 'border-secondary-foreground/50'
-                        : ''
-                    }`}
-                    value={row.stock_id || ''}
-                    onChange={(e) =>
+                  <ItemCombobox
+                    stockItems={stock.data ?? []}
+                    selectedStockId={row.stock_id}
+                    searchText={row.itemSearch}
+                    needsReview={needsReview}
+                    onSelect={(item) =>
                       update(row.id, {
-                        stock_id:
-                          e.target.value || null,
+                        stock_id: item?.id ?? null,
+                        itemSearch: item?.name ?? '',
+                        unit_price: row.unit_price != null ? row.unit_price : null,
                       })
                     }
-                    data-testid={`select-review-item-${row.id}`}
-                  >
-                    <option value="">
-                      Select catalog item
-                    </option>
-
-                    {(stock.data ?? []).map((item) => (
-                      <option
-                        key={item.id}
-                        value={item.id}
-                      >
-                        {item.name} · {money(item.unit_price)}
-                      </option>
-                    ))}
-                  </select>
+                    onSearchChange={(text) =>
+                      update(row.id, { itemSearch: text })
+                    }
+                    data-testid={`combobox-review-item-${row.id}`}
+                  />
 
                   {/* Quantity */}
 
@@ -1006,13 +1343,33 @@ function ReviewPage() {
                     data-testid={`input-review-quantity-${row.id}`}
                   />
 
-                  {/* Rate */}
+                  {/* Rate — editable for wholesale custom pricing */}
 
-                  <span className="hidden text-sm text-muted-foreground md:block">
-                    {stockItem
-                      ? `${money(stockItem.unit_price)}/${stockItem.unit}`
-                      : '—'}
-                  </span>
+                  <div className="flex flex-col gap-1">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className={`${inputClass} !min-h-9 text-right`}
+                      value={row.unit_price ?? (stockItem?.unit_price ?? '')}
+                      onChange={(e) =>
+                        update(row.id, {
+                          unit_price:
+                            e.target.value === ''
+                              ? null
+                              : Number(e.target.value),
+                        })
+                      }
+                      placeholder={stockItem ? String(stockItem.unit_price) : '—'}
+                      title="Edit rate for this line"
+                      data-testid={`input-review-rate-${row.id}`}
+                    />
+                    {stockItem && row.unit_price != null && row.unit_price !== stockItem.unit_price && (
+                      <span className="text-[10px] text-muted-foreground text-right">
+                        catalog: {money(stockItem.unit_price)}
+                      </span>
+                    )}
+                  </div>
 
                   {/* Partial availability warning */}
 
@@ -1070,7 +1427,7 @@ function ReviewPage() {
 
                   <span className="mono text-sm font-medium md:text-right">
                     {money(
-                      row.qty * priceFor(row),
+                      row.qty * priceFor(row) - (row.line_discount ?? 0),
                     )}
                   </span>
 
@@ -1327,6 +1684,99 @@ function ReviewPage() {
 
           </div>
 
+          {/* ── Khata Balance Card (shows only when existing customer is selected) ── */}
+
+          {customer.id && customerSummary && (
+            <div className="mt-5 rounded-xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-950/25">
+
+              <p className="mb-3 text-xs font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                Khata / Outstanding Balance
+              </p>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <p className="text-[11px] text-muted-foreground">Total purchased</p>
+                  <p className="mono text-sm font-semibold">{money(customerSummary.total_purchase)}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-muted-foreground">Total paid</p>
+                  <p className="mono text-sm font-semibold text-emerald-700 dark:text-emerald-400">{money(customerSummary.total_paid)}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-muted-foreground">Outstanding</p>
+                  <p className={`mono text-sm font-bold ${customerSummary.total_due > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                    {money(customerSummary.total_due)}
+                  </p>
+                </div>
+              </div>
+
+              {customerSummary.total_due > 0 && (
+                <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-400">
+                  ⚠ This customer has an outstanding balance. Previous dues will appear on their invoice.
+                </p>
+              )}
+
+            </div>
+          )}
+
+          {/* ── Paid Today ── */}
+
+          <div className="mt-5 border-t border-border pt-5">
+
+            <div className="flex items-center gap-2 mb-3">
+              <Wallet size={16} className="text-muted-foreground" />
+              <p className="text-sm font-bold">
+                Paid Today{' '}
+                <span className="font-normal text-muted-foreground">(optional)</span>
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Amount received at counter</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  className={inputClass}
+                  value={paidToday}
+                  onChange={(e) =>
+                    setPaidToday(
+                      e.target.value === '' ? '' : Number(e.target.value),
+                    )
+                  }
+                  placeholder="0.00"
+                  data-testid="input-paid-today"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Payment method</label>
+                <select
+                  className={inputClass}
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  data-testid="select-payment-method"
+                >
+                  <option value="cash">Cash</option>
+                  <option value="upi">UPI</option>
+                  <option value="card">Card</option>
+                  <option value="bank_transfer">Bank Transfer</option>
+                </select>
+              </div>
+
+            </div>
+
+            {paidToday !== '' && Number(paidToday) > 0 && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Balance due on invoice:{' '}
+                <strong className="text-foreground">{money(Math.max(0, total - Number(paidToday)))}</strong>
+              </p>
+            )}
+
+          </div>
+
           {/* Confirm */}
 
           <div className="mt-5 flex justify-end">
@@ -1359,6 +1809,71 @@ function ReviewPage() {
         </SectionCard>
 
       </div>
+
+      {/* ── WhatsApp Order Paste Modal ── */}
+
+      {showWhatsApp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-2xl">
+
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MessageSquare size={18} className="text-emerald-500" />
+                <p className="text-sm font-bold">Paste WhatsApp Order</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setShowWhatsApp(false); setWhatsAppText(''); }}
+                className="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground hover:bg-muted"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <p className="mb-3 text-xs text-muted-foreground">
+              Paste the WhatsApp order text below. Each line will be matched to your catalog automatically.
+            </p>
+
+            <textarea
+              className={`${inputClass} min-h-[160px] resize-y font-mono text-xs`}
+              value={whatsAppText}
+              onChange={(e) => setWhatsAppText(e.target.value)}
+              placeholder={"e.g.\n1. Sugar 10 kg\n2. Basmati Rice 5 bag\n3. Mustard Oil 3 tin"}
+              autoFocus
+            />
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { setShowWhatsApp(false); setWhatsAppText(''); }}
+                className={buttonQuiet}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleWhatsAppPaste}
+                disabled={whatsAppParsing || !whatsAppText.trim()}
+                className={buttonPrimary}
+              >
+                {whatsAppParsing ? (
+                  <>
+                    <Loader2 className="animate-spin" size={15} />
+                    Matching…
+                  </>
+                ) : (
+                  <>
+                    <Check size={15} />
+                    Import items
+                  </>
+                )}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </AppShell>
   );
 }

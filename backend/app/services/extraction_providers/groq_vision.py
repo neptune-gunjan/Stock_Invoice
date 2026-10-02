@@ -48,7 +48,8 @@ Example of the REQUIRED output format:
 ]
 
 Rules:
-- Preserve the item name as written.
+- Preserve the item name exactly as written.
+- If the text is written in Hindi or a regional script (e.g. "चीनी"), preserve the exact characters or transliterate it to English (e.g. "chini") whichever is clearer.
 - Extract the quantity if visible.
 - Extract the unit if visible.
 - If quantity is unclear, use null.

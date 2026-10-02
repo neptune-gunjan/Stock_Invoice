@@ -209,6 +209,9 @@ def get_transaction_service(
     invoice_repository: InvoiceRepository = Depends(
         get_invoice_repository
     ),
+    payment_repository: PaymentRepository = Depends(
+        get_payment_repository
+    ),
 ) -> TransactionService:
 
     return TransactionService(
@@ -217,6 +220,7 @@ def get_transaction_service(
         customer_service,
         stock_movement_repository,
         invoice_repository,
+        payment_repository,
     )
 
 

@@ -109,3 +109,61 @@ class MatchingService:
                 "needs_review": best_score < self._threshold,
             }
         )
+
+    def match_text(self, text: str, business_id: uuid.UUID) -> list[ExtractedItem]:
+        """Parses lines of order text (e.g. from WhatsApp) and matches against stock catalog."""
+        import re
+
+        lines = [line.strip() for line in text.strip().splitlines() if line.strip()]
+        catalog = self._stock_service.list_stock(business_id=business_id)
+
+        common_units = {
+            "kg", "kgs", "kilo", "g", "gm", "gms", "gram", "grams",
+            "l", "lt", "ltr", "litre", "litres", "liter", "liters",
+            "box", "boxes", "carton", "cartons", "peti", "petis",
+            "bag", "bags", "bori", "boris", "tin", "tins", "can", "cans",
+            "pc", "pcs", "piece", "pieces", "pkt", "pkts", "packet", "packets",
+            "bottle", "bottles", "dozen", "dz"
+        }
+
+        matched_items: list[ExtractedItem] = []
+        for line in lines:
+            # Strip list prefixes like "1.", "1)", "-", "•"
+            cleaned = re.sub(r'^(?:[-*•\d]+[.)]?\s*)', '', line).strip()
+            if not cleaned:
+                continue
+
+            qty = 1.0
+            unit: str | None = None
+            raw_product = cleaned
+
+            # Match leading number: "10 box parle g", "5 kg rice", "2 oil"
+            match_leading = re.match(r'^(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?\s+(.+)$', cleaned)
+            if match_leading:
+                qty_val, possible_unit, rest = match_leading.groups()
+                qty = float(qty_val)
+                if possible_unit and possible_unit.lower() in common_units:
+                    unit = possible_unit.lower()
+                    raw_product = rest.strip()
+                else:
+                    raw_product = f"{possible_unit or ''} {rest}".strip()
+            else:
+                # Match trailing number: "parle g 10 box", "sugar 50 kg"
+                match_trailing = re.search(r'(.+?)\s+(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?$', cleaned)
+                if match_trailing:
+                    rest, qty_val, possible_unit = match_trailing.groups()
+                    qty = float(qty_val)
+                    if possible_unit and possible_unit.lower() in common_units:
+                        unit = possible_unit.lower()
+                    raw_product = rest.strip()
+
+            extracted = ExtractedItem(
+                id=uuid.uuid4(),
+                extraction_job_id=uuid.uuid4(),
+                raw_text=raw_product,
+                qty=qty,
+                unit=unit,
+            )
+            matched_items.append(self._match_item(extracted, catalog))
+
+        return matched_items

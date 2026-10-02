@@ -83,6 +83,8 @@ export interface ExtractionJob {
 export interface ConfirmItemInput {
   stock_id: string;
   qty: number;
+  unit_price?: number | null;   // custom wholesale rate (null = use catalog price)
+  discount?: number;            // line-level discount amount
   extracted_item_id?: string | null;
 }
 
@@ -90,8 +92,10 @@ export interface ConfirmRequest {
   extraction_job_id?: string | null;
   customer_id?: string | null;
   items: ConfirmItemInput[];
-  discount?: number;
+  discount?: number;            // bill-level overall discount
   tax_rate?: number;
+  initial_payment_amount?: number | null;   // amount received at counter
+  initial_payment_method?: string | null;   // 'cash' | 'upi' | 'card' | 'bank_transfer'
 }
 
 export interface TransactionItem {
@@ -339,6 +343,12 @@ export const endpoints = {
   matchJob: (jobId: string) =>
     apiJson<ExtractedItem[]>(`/match/${jobId}`, {
       method: 'POST',
+    }),
+
+  matchText: (text: string) =>
+    apiJson<ExtractedItem[]>('/match/text', {
+      method: 'POST',
+      body: { text },
     }),
 
   getJob: (jobId: string) =>

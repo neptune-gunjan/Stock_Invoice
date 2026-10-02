@@ -105,6 +105,8 @@ import CustomerDetailPage from './pages/CustomerDetailPage';
 import TransactionsPage from './pages/TransactionsPage';
 import BusinessPage from './pages/BusinessPage';
 import NotFound from './pages/NotFound';
+import { PosReceipt } from './pages/PosReceipt';
+import { CustomerStatement } from './pages/CustomerStatement';
 
 function PageHeading({
   eyebrow,
@@ -625,6 +627,16 @@ function Routes() {
         <Route path="/invoice/:invoiceId">
           <RequireAuth>
             <InvoicePage />
+          </RequireAuth>
+        </Route>
+        <Route path="/receipt/:id">
+          <RequireAuth>
+            <PosReceipt />
+          </RequireAuth>
+        </Route>
+        <Route path="/statement/:id">
+          <RequireAuth>
+            <CustomerStatement />
           </RequireAuth>
         </Route>
         <Route path="/catalog">

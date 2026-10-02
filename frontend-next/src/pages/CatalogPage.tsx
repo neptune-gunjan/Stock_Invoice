@@ -26,7 +26,8 @@ import {
   History,
   PackagePlus,
   Eye,
-  EyeOff
+  EyeOff,
+  Printer
 } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -599,14 +600,45 @@ function CatalogPage() {
   const [form, setForm] = useState(blankForm);
   const [error, setError] = useState('');
 
+  const [showLowStockOnly, setShowLowStockOnly] = useState(false);
+
   const items = stock.data ?? [];
   const shown = useMemo(
     () =>
-      items.filter((item) =>
-        `${item.name} ${(item.aliases ?? []).join(' ')} ${item.sku ?? ''}`.toLowerCase().includes(query.toLowerCase()),
-      ),
-    [items, query],
+      items.filter((item) => {
+        const matchesSearch = `${item.name} ${(item.aliases ?? []).join(' ')} ${item.sku ?? ''}`.toLowerCase().includes(query.toLowerCase());
+        const isLow = Number(item.quantity_available) <= Number(item.low_stock_threshold);
+        return matchesSearch && (!showLowStockOnly || isLow);
+      }),
+    [items, query, showLowStockOnly],
   );
+
+  const inventoryValue = useMemo(() => {
+    return items.reduce((sum, item) => sum + (item.quantity_available * item.unit_price), 0);
+  }, [items]);
+
+  const exportCatalog = () => {
+    if (!items.length) return;
+    const headers = ['ID', 'Name', 'SKU', 'Aliases', 'Unit', 'Price', 'Low Stock Threshold', 'Available'];
+    const rows = items.map(item => [
+      item.id,
+      `"${item.name.replace(/"/g, '""')}"`,
+      `"${item.sku ?? ''}"`,
+      `"${(item.aliases ?? []).join(', ')}"`,
+      item.unit,
+      item.unit_price,
+      item.low_stock_threshold,
+      item.quantity_available
+    ]);
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'catalog_export.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   const begin = (item?: StockItem) => {
     setError('');
@@ -721,26 +753,41 @@ function CatalogPage() {
 
   return (
     <AppShell>
-      <PageHeading
-        eyebrow="Stock catalog"
-        title="Know what’s on the shelf."
-        description="Your catalog keeps suggestions grounded in the way you actually sell things."
-        action={
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => {
-                const firstItem = items[0];
+      <div className="print:hidden">
+        <PageHeading
+          eyebrow="Stock catalog"
+          title="Know what’s on the shelf."
+          description="Your catalog keeps suggestions grounded in the way you actually sell things."
+          action={
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => window.print()}
+                className={buttonQuiet}
+                type="button"
+              >
+                <Printer size={17} /> Print List
+              </button>
+              <button
+                onClick={exportCatalog}
+                className={buttonQuiet}
+                type="button"
+              >
+                <Download size={17} /> Export CSV
+              </button>
+              <button
+                onClick={() => {
+                  const firstItem = items[0];
 
-                setMovementItem(firstItem ?? null);
-                setMovementType('purchase');
-                setMovementQty('');
-                setMovementError('');
-              }}
-              className={buttonQuiet}
-              type="button"
-            >
-              <PackagePlus size={17} /> Stock movement
-            </button>
+                  setMovementItem(firstItem ?? null);
+                  setMovementType('purchase');
+                  setMovementQty('');
+                  setMovementError('');
+                }}
+                className={buttonQuiet}
+                type="button"
+              >
+                <PackagePlus size={17} /> Stock movement
+              </button>
           <button onClick={() => begin()} className={buttonPrimary} data-testid="button-add-catalog-item">
             <Plus size={17} /> Add item
           </button>
@@ -758,8 +805,24 @@ function CatalogPage() {
             data-testid="input-search-catalog"
           />
         </div>
-        <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 text-xs text-muted-foreground">
+        
+        <label className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 sm:py-0 text-sm font-medium cursor-pointer hover:bg-muted/50 transition">
+          <input 
+            type="checkbox" 
+            className="rounded border-gray-300 text-primary focus:ring-primary"
+            checked={showLowStockOnly}
+            onChange={(e) => setShowLowStockOnly(e.target.checked)}
+          />
+          Low stock only
+        </label>
+
+        <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 sm:py-0 text-xs text-muted-foreground">
           <Filter size={15} /> {shown.length} of {items.length} items
+        </div>
+        
+        <div className="flex flex-col justify-center rounded-xl border border-border bg-primary/5 px-4 py-2 sm:py-0">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Total Stock Value</p>
+          <p className="text-sm font-extrabold font-mono text-primary">{money(inventoryValue)}</p>
         </div>
       </div>
 
@@ -1294,6 +1357,38 @@ function CatalogPage() {
     </div>
   </div>
 )}
+      </div>
+
+      <div className="hidden print:block text-black bg-white" style={{ fontFamily: 'sans-serif' }}>
+        <style>{`
+          @media print {
+            @page { margin: 1cm; size: A4 portrait; }
+            body { margin: 0; background: white; -webkit-print-color-adjust: exact; }
+            .app-shell { display: none !important; }
+          }
+        `}</style>
+        <h1 className="text-3xl font-extrabold mb-2 text-center uppercase tracking-tight">Wholesale Price List</h1>
+        <p className="text-center text-gray-600 mb-8">Generated: {new Date().toLocaleDateString()}</p>
+        
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="border-b-2 border-black text-left">
+              <th className="py-2 pr-4 font-bold">Item Name</th>
+              <th className="py-2 pr-4 font-bold">SKU</th>
+              <th className="py-2 text-right font-bold">Price (₹)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map(item => (
+                <tr key={item.id} className="border-b border-gray-200 hover:bg-gray-50">
+                  <td className="py-2 pr-4 font-semibold">{item.name}</td>
+                  <td className="py-2 pr-4 text-xs font-mono text-gray-600">{item.sku || '—'}</td>
+                  <td className="py-2 text-right font-extrabold">{money(item.unit_price)} <span className="text-gray-500 font-normal text-xs">/{item.unit}</span></td>
+                </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </AppShell>
   );
 }

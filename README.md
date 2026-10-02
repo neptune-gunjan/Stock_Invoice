@@ -4,18 +4,12 @@
 
 ## Status
 
-Phases 1-6 are implemented (backend + a minimal test frontend). Storage is
-JSON files on local disk rather than Postgres, and handwriting extraction
-calls Groq's vision API rather than Claude's -- both were deliberate
-substitutions for this build, made behind repository/provider interfaces
-(see "Architecture notes" below) so either can be swapped in later without
-touching business logic.
+Phases 1-7 are implemented. The application has evolved from a minimal test frontend to a full-featured Wholesale Point-of-Sale (POS) ERP. 
 
-- `backend/app/` -- FastAPI app, one router/service/repository set per
-  phase. See `docs/architecture.md` for the intended folder layout.
-- `frontend-next/` -- React + Vite UI: upload an image,
-  review/correct extracted + matched items, optionally attach a customer,
-  confirm, download the PDF invoice.
+Storage is currently JSON files on local disk (with thread-safe atomic writes via `RLock`), and handwriting extraction calls Groq's vision API (optimized for English, Hindi, and Hinglish). Both are hidden behind repository/provider interfaces so they can be easily swapped for Postgres or Claude later.
+
+- `backend/app/` -- FastAPI app, one router/service/repository set per phase.
+- `frontend-next/` -- React + Vite UI. Includes AI extraction review, Stock Catalog with valuation, Barcode scanning, Cash Drawer calculators, Khata ledgers with WhatsApp reminders, 80mm thermal receipt printing, and UPI QR codes.
 
 ## Run it locally
 

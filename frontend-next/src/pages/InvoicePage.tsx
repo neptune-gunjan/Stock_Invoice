@@ -26,7 +26,8 @@ import {
   History,
   PackagePlus,
   Eye,
-  EyeOff
+  EyeOff,
+  Printer
 } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -711,6 +712,15 @@ function InvoicePage() {
               {data.status === 'cancelled'
                 ? 'Cancelled'
                 : 'Cancel invoice'}
+            </button>
+
+            <button
+              onClick={() => window.open(`/receipt/${invoiceId}`, '_blank')}
+              className={buttonQuiet}
+              data-testid="button-print-pos"
+            >
+              <Printer size={16} />
+              POS Receipt
             </button>
 
             <button
