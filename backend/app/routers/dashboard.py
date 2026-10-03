@@ -94,3 +94,22 @@ def get_low_stock_products(
     return service.get_low_stock_products(
         current_user.business_id
     )
+
+from app.schemas.dashboard import ReportsSummary
+
+@router.get(
+    "/reports",
+    response_model=ReportsSummary,
+)
+def get_reports(
+    service: DashboardService = Depends(
+        get_dashboard_service
+    ),
+    current_user: User = Depends(
+        get_current_user
+    ),
+) -> ReportsSummary:
+
+    return service.get_reports(
+        current_user.business_id
+    )

@@ -27,7 +27,7 @@ import {
   History,
   PackagePlus,
   Eye,
-  EyeOff
+  EyeOff, TrendingUp, IndianRupee, BellRing, Users, Boxes
 } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -336,55 +336,45 @@ export function Dashboard() {
   const stats = [
     {
       label: 'Total sales',
-      value:
-        summary.data?.total_sales !== undefined
-          ? money(summary.data.total_sales)
-          : '—',
+      value: summary.data?.total_sales !== undefined ? money(summary.data.total_sales) : '—',
       note: `${summary.data?.total_invoices ?? '—'} invoices confirmed`,
-      icon: '01',
+      icon: <TrendingUp size={18} />,
+      color: 'text-primary bg-primary/10'
     },
     {
       label: 'Total paid',
-      value:
-        summary.data?.total_paid !== undefined
-          ? money(summary.data.total_paid)
-          : '—',
+      value: summary.data?.total_paid !== undefined ? money(summary.data.total_paid) : '—',
       note: 'payments received',
-      icon: '02',
+      icon: <IndianRupee size={18} />,
+      color: 'text-emerald-600 bg-emerald-600/10'
     },
     {
       label: 'Outstanding / Due',
-      value:
-        summary.data?.outstanding_amount !== undefined
-          ? money(summary.data.outstanding_amount)
-          : '—',
-      note:
-        summary.data?.outstanding_amount &&
-        summary.data.outstanding_amount > 0
-          ? 'payment still due'
-          : 'all payments settled',
-      icon: '03',
+      value: summary.data?.outstanding_amount !== undefined ? money(summary.data.outstanding_amount) : '—',
+      note: summary.data?.outstanding_amount && summary.data.outstanding_amount > 0 ? 'payment still due' : 'all payments settled',
+      icon: <AlertCircle size={18} />,
+      color: 'text-rose-600 bg-rose-600/10'
     },
     {
       label: 'Customers',
       value: summary.data?.total_customers ?? '—',
       note: 'customers in your records',
-      icon: '04',
+      icon: <Users size={18} />,
+      color: 'text-blue-600 bg-blue-600/10'
     },
     {
       label: 'Products',
       value: summary.data?.total_products ?? '—',
       note: 'items in your catalog',
-      icon: '05',
+      icon: <Boxes size={18} />,
+      color: 'text-amber-600 bg-amber-600/10'
     },
     {
       label: 'Low stock alerts',
       value: summary.data?.low_stock_products ?? '—',
-      note:
-        summary.data?.low_stock_products
-          ? 'worth checking today'
-          : 'all shelves look good',
-      icon: '06',
+      note: summary.data?.low_stock_products ? 'worth checking today' : 'all shelves look good',
+      icon: <BellRing size={18} />,
+      color: summary.data?.low_stock_products ? 'text-amber-600 bg-amber-600/10' : 'text-emerald-600 bg-emerald-600/10'
     },
   ];
 
@@ -471,9 +461,9 @@ export function Dashboard() {
               }`}
             >
               <div className="flex items-start justify-between">
-                <span className="mono text-[10px] text-muted-foreground">
+                <div className={`grid h-10 w-10 place-items-center rounded-xl ${stat.color || 'bg-primary/10 text-primary'}`}>
                   {stat.icon}
-                </span>
+                </div>
 
                 {isLowStock && (
                   <span className="rounded-full bg-secondary/20 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-secondary-foreground">

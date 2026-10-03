@@ -113,11 +113,17 @@ class TransactionService:
         if discount > subtotal:
             raise ValueError("discount cannot be greater than subtotal")
 
-        taxable_amount = subtotal - discount
+        # Distribute global discount proportionally to calculate exact tax per item
+        tax_amount = 0.0
+        calculated_items = []
+        for stock_item, qty, unit_price, line_total in resolved:
+            item_global_discount_share = discount * (line_total / subtotal) if subtotal > 0 else 0.0
+            taxable = line_total - item_global_discount_share
+            item_tax = taxable * (stock_item.gst_rate / 100)
+            tax_amount += item_tax
+            calculated_items.append((stock_item, qty, unit_price, line_total, stock_item.gst_rate, item_tax))
 
-        tax_amount = taxable_amount * request.tax_rate / 100
-
-        total_amount = taxable_amount + tax_amount
+        total_amount = (subtotal - discount) + tax_amount
 
         transaction = Transaction(
             business_id=business_id,
@@ -136,9 +142,11 @@ class TransactionService:
                 unit=stock_item.unit,
                 qty=qty,
                 unit_price=unit_price,
+                gst_rate=gst_rate,
+                tax_amount=item_tax,
                 line_total=line_total,
             )
-            for stock_item, qty, unit_price, line_total in resolved
+            for stock_item, qty, unit_price, line_total, gst_rate, item_tax in calculated_items
         ]
         self._repository.add(transaction, items)
 

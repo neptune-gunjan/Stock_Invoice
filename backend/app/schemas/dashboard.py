@@ -38,3 +38,22 @@ class LowStockProductRead(BaseModel):
     unit: str
     quantity_available: float
     low_stock_threshold: float
+
+class TopProduct(BaseModel):
+    name: str
+    qty_sold: float
+    revenue: float
+
+class TopCustomer(BaseModel):
+    name: str
+    revenue: float
+
+class ReportsSummary(BaseModel):
+    gross_sales: float
+    discounts_given: float
+    net_sales: float
+    gst_collected: float
+    total_payments_received: float
+    total_outstanding: float
+    top_products: list[TopProduct]
+    top_customers: list[TopCustomer]

@@ -1,17 +1,19 @@
 import { useState, useEffect, type ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
-import { BarChart3, Boxes, FileCheck2, FilePlus2, History, LogOut, Menu, Save, Store, Users, X, Zap } from 'lucide-react';
+import { BarChart3, Boxes, FileCheck2, FilePlus2, History, PackagePlus, PieChart, LogOut, Menu, Save, Store, Users, X, Zap } from 'lucide-react';
 import { clearSession } from '@/lib/auth';
 import { useProfile } from '@/lib/data';
 
 const nav = [
   { href: '/dashboard', label: 'Overview', shortcut: 'Alt+D', icon: BarChart3 },
+  { href: '/reports', label: 'Reports', icon: PieChart },
   { href: '/business', label: 'Business', icon: Store },
   { href: '/catalog', label: 'Stock catalog', shortcut: 'Alt+S', icon: Boxes },
+  { href: '/purchase', label: 'Stock In', icon: PackagePlus },
   { href: '/upload', label: 'New invoice', shortcut: 'Alt+N', icon: FilePlus2 },
   { href: '/review', label: 'Quick Bill ⚡', shortcut: 'Alt+Q', icon: Zap, highlight: true },
   { href: '/customers', label: 'Customers', shortcut: 'Alt+C', icon: Users },
-  { href: '/transactions', label: 'Transactions', icon: History }, 
+  { href: '/transactions', label: 'Transactions', icon: History },
 ];
 
 export function Mark({ compact = false }: { compact?: boolean }) {

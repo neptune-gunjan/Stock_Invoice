@@ -306,6 +306,9 @@ def get_dashboard_service(
     payment_repository: PaymentRepository = Depends(
         get_payment_repository
     ),
+    transaction_repository: TransactionRepository = Depends(
+        get_transaction_repository
+    ),
 ) -> DashboardService:
 
     return DashboardService(
@@ -313,6 +316,7 @@ def get_dashboard_service(
         stock_repository,
         customer_repository,
         payment_repository,
+        transaction_repository,
     )
 
 

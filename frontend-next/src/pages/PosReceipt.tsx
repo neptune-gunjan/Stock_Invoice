@@ -75,6 +75,22 @@ export function PosReceipt() {
       </table>
 
       <div className="flex justify-between font-bold text-sm mb-1">
+        <span>SUBTOTAL:</span>
+        <span>{money(transaction.data.subtotal)}</span>
+      </div>
+      {transaction.data.discount > 0 && (
+        <div className="flex justify-between text-xs mb-1">
+          <span>Discount:</span>
+          <span>- {money(transaction.data.discount)}</span>
+        </div>
+      )}
+      {transaction.data.tax > 0 && (
+        <div className="flex justify-between text-xs mb-1">
+          <span>GST (Tax):</span>
+          <span>{money(transaction.data.tax)}</span>
+        </div>
+      )}
+      <div className="flex justify-between font-bold text-sm mb-1">
         <span>TOTAL:</span>
         <span>{money(invoice.data.total_amount)}</span>
       </div>

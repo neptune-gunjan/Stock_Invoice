@@ -14,24 +14,28 @@ from pydantic import BaseModel, Field, field_validator
 class StockCreate(BaseModel):
     name: str = Field(min_length=1)
     sku: Optional[str] = None
+    hsn_code: Optional[str] = None
 
     unit: str = Field(min_length=1)
     unit_price: float = Field(ge=0)
     quantity_available: float = Field(ge=0)
 
     low_stock_threshold: float = Field(default=0, ge=0)
+    gst_rate: float = Field(default=0, ge=0)
 
     aliases: list[str] = Field(default_factory=list)
 
 class StockUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1)
     sku: Optional[str] = None
+    hsn_code: Optional[str] = None
 
     unit: Optional[str] = Field(default=None, min_length=1)
     unit_price: Optional[float] = Field(default=None, ge=0)
     quantity_available: Optional[float] = Field(default=None, ge=0)
 
     low_stock_threshold: Optional[float] = Field(default=None, ge=0)
+    gst_rate: Optional[float] = Field(default=None, ge=0)
 
     aliases: Optional[list[str]] = None
     
@@ -39,12 +43,14 @@ class StockRead(BaseModel):
     id: uuid.UUID
     name: str
     sku: Optional[str]
+    hsn_code: Optional[str]
     aliases: list[str]
 
     unit: str
     unit_price: float
     quantity_available: float
     low_stock_threshold: float
+    gst_rate: float
 
     created_at: datetime
     updated_at: datetime
@@ -66,3 +72,12 @@ class StockMovementRead(BaseModel):
 class StockMovementCreate(BaseModel):
     movement_type: Literal["purchase", "return", "damage"]
     quantity: float = Field(gt=0)
+
+class BulkPurchaseItem(BaseModel):
+    stock_id: uuid.UUID
+    qty: float = Field(gt=0)
+    unit_cost: Optional[float] = None
+
+class BulkPurchaseRequest(BaseModel):
+    supplier_name: Optional[str] = None
+    items: list[BulkPurchaseItem]

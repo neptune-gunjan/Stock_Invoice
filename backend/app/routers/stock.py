@@ -15,7 +15,8 @@ from fastapi import (
 
 from app.dependencies import get_current_user, get_stock_service
 from app.models.user import User
-from app.schemas.stock import (StockCreate, StockRead, StockUpdate, StockMovementCreate, StockMovementRead,)
+from app.schemas.stock import (StockCreate, StockRead, StockUpdate,
+    BulkPurchaseRequest, StockMovementCreate, StockMovementRead,)
 from app.services.stock_service import StockNotFoundError, StockService
 from app.schemas.stock_import import StockImportResult
 
@@ -139,6 +140,27 @@ def list_stock_movements(
 
 
 @router.post(
+    "/bulk-purchase",
+    response_model=dict,
+)
+def bulk_purchase(
+    payload: BulkPurchaseRequest,
+    service: StockService = Depends(get_stock_service),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    try:
+        for item in payload.items:
+            service.apply_movement(
+                item_id=item.stock_id,
+                movement_type="purchase",
+                quantity=item.qty,
+                business_id=current_user.business_id,
+            )
+        return {"status": "ok", "items_processed": len(payload.items)}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+@router.post(
     "/{item_id}/movement",
     response_model=StockRead,
 )
@@ -177,6 +199,7 @@ def create_stock_movement(
 def update_stock(
     item_id: uuid.UUID,
     payload: StockUpdate,
+    BulkPurchaseRequest,
     service: StockService = Depends(get_stock_service),
     current_user: User = Depends(get_current_user),
 ) -> StockRead:

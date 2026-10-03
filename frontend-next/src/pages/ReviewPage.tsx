@@ -805,6 +805,7 @@ function ReviewPage() {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [paidToday, setPaidToday] = useState<number | ''>('');
+  const [globalDiscount, setGlobalDiscount] = useState<number | ''>('');
   const [paymentMethod, setPaymentMethod] = useState<string>('cash');
   const [showWhatsApp, setShowWhatsApp] = useState(false);
   const [whatsAppText, setWhatsAppText] = useState('');
@@ -1122,6 +1123,8 @@ function ReviewPage() {
             row.extracted_item_id ?? undefined,
         })),
 
+        discount: Number(globalDiscount) || 0,
+
         initial_payment_amount:
           paidToday !== '' && Number(paidToday) > 0
             ? Number(paidToday)
@@ -1233,11 +1236,12 @@ function ReviewPage() {
 
         <SectionCard className="overflow-hidden">
 
-          <div className="hidden grid-cols-[1.1fr_1.4fr_.55fr_.9fr_.8fr_40px] gap-3 border-b border-border bg-muted/45 px-5 py-3 mono text-[10px] uppercase tracking-wider text-muted-foreground md:grid">
+          <div className="hidden grid-cols-[1.1fr_1.3fr_.5fr_.8fr_.8fr_.8fr_40px] gap-3 border-b border-border bg-muted/45 px-5 py-3 mono text-[10px] uppercase tracking-wider text-muted-foreground md:grid">
             <span>Written as</span>
             <span>Catalog match</span>
             <span>Qty</span>
             <span>Rate ✎</span>
+            <span>Disc. ✎</span>
             <span className="text-right">Line total</span>
             <span />
           </div>
@@ -1265,7 +1269,7 @@ function ReviewPage() {
               return (
                 <div
                   key={row.id}
-                  className={`grid gap-4 px-4 py-5 md:grid-cols-[1.1fr_1.4fr_.55fr_.9fr_.8fr_40px] md:items-center md:gap-3 md:px-5 ${
+                  className={`grid gap-4 px-4 py-5 md:grid-cols-[1.1fr_1.3fr_.5fr_.8fr_.8fr_.8fr_40px] md:items-center md:gap-3 md:px-5 ${
                     needsReview
                       ? 'bg-secondary/10'
                       : ''
@@ -1371,10 +1375,27 @@ function ReviewPage() {
                     )}
                   </div>
 
+                  {/* Discount — editable for per-line discount */}
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className={`${inputClass} !min-h-9 text-right`}
+                    value={row.line_discount || ''}
+                    onChange={(e) =>
+                      update(row.id, {
+                        line_discount: Number(e.target.value),
+                      })
+                    }
+                    placeholder="0"
+                    title="Discount for this line"
+                    data-testid={`input-review-discount-${row.id}`}
+                  />
+
                   {/* Partial availability warning */}
 
                   {hasShortage && (
-                    <div className="md:col-span-5 rounded-xl border border-amber-300 bg-amber-50 px-3 py-3 dark:border-amber-700 dark:bg-amber-950/30">
+                    <div className="md:col-span-6 rounded-xl border border-amber-300 bg-amber-50 px-3 py-3 dark:border-amber-700 dark:bg-amber-950/30">
 
                       <div className="flex flex-wrap items-center justify-between gap-3">
 
@@ -1464,18 +1485,35 @@ function ReviewPage() {
             <p className="text-xs text-muted-foreground">
               <strong className="text-foreground">
                 {rows.length} lines
-              </strong>{' '}
-              · Tax and discounts are not applied
+              </strong>
             </p>
 
-            <div className="flex items-center justify-between gap-8 sm:justify-end">
-              <span className="text-sm font-bold">
-                Total
-              </span>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-8">
+              
+              <div className="flex items-center justify-between gap-4 sm:justify-end">
+                <span className="text-sm font-bold text-muted-foreground">
+                  Global Discount
+                </span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  className={`${inputClass} !min-h-9 w-24 text-right`}
+                  value={globalDiscount}
+                  onChange={(e) => setGlobalDiscount(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="0.00"
+                />
+              </div>
 
-              <span className="mono text-2xl font-medium">
-                {money(total)}
-              </span>
+              <div className="flex items-center justify-between gap-4 sm:justify-end">
+                <span className="text-sm font-bold">
+                  Total
+                </span>
+
+                <span className="mono text-2xl font-medium">
+                  {money(total - (Number(globalDiscount) || 0))}
+                </span>
+              </div>
             </div>
 
           </div>

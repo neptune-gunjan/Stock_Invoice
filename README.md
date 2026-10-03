@@ -1,53 +1,98 @@
-# Stock & Invoice Assistant
+# Stock & Invoice POS System
 
-`PLAN.md` is the master plan. Phase-by-phase functional specs live in `/docs`.
+A modern, fast, and fully-featured Point of Sale (POS) and Inventory Management system built for wholesale and retail businesses.
 
-## Status
+## 🚀 Features
 
-Phases 1-7 are implemented. The application has evolved from a minimal test frontend to a full-featured Wholesale Point-of-Sale (POS) ERP. 
+This system covers the entire lifecycle of a wholesale billing operation:
 
-Storage is currently JSON files on local disk (with thread-safe atomic writes via `RLock`), and handwriting extraction calls Groq's vision API (optimized for English, Hindi, and Hinglish). Both are hidden behind repository/provider interfaces so they can be easily swapped for Postgres or Claude later.
+1. **⭐ Billing Editor**: Advanced invoice creation with real-time stock updates.
+2. **⭐ Extraction → Review**: AI-assisted invoice parsing (extract items from uploaded distributor bills).
+3. **⭐ Editable Rates**: Easily adjust selling prices dynamically on the fly during billing.
+4. **⭐ Discounts**: Support for both item-level wholesale trade discounts and global bill discounts.
+5. **⭐ Quick Bill ⚡**: A lightning-fast, keyboard-friendly interface for rapid checkout.
+6. **⭐ Product Search**: Blazing fast typeahead search by Name, SKU, or Aliases.
+7. **⭐ Customer Khata (Credit)**: Track outstanding balances, credit limits, and complete customer ledgers.
+8. **⭐ Payments**: Record Cash, UPI, Card, or Bank Transfers against specific invoices.
+9. **⭐ Purchase / Stock In**: Dedicated workflow to intake stock from suppliers and automatically update inventory.
+10. **⭐ GST + HSN**: Full compliance with item-level GST % rates and HSN code tracking.
+11. **⭐ Invoice Formats**: Professional PDF generation and thermal POS receipt printing support.
+12. **⭐ WhatsApp Integration**: Send invoices and payment links directly to customers via WhatsApp.
+13. **⭐ Reports & Analytics**: Deep insights into Gross Sales, Net Profit, GST Collected, and Top Selling Products.
 
-- `backend/app/` -- FastAPI app, one router/service/repository set per phase.
-- `frontend-next/` -- React + Vite UI. Includes AI extraction review, Stock Catalog with valuation, Barcode scanning, Cash Drawer calculators, Khata ledgers with WhatsApp reminders, 80mm thermal receipt printing, and UPI QR codes.
+---
 
-## Run it locally
+## 🛠️ Tech Stack
 
-**Backend:**
+### Frontend (Client)
+- **Framework**: React 18 + Vite
+- **Routing**: Wouter (lightweight & fast)
+- **State Management**: TanStack React Query (data fetching & caching)
+- **Styling**: Tailwind CSS + Lucide Icons
+- **Components**: Custom, accessible UI components built for speed and density.
+
+### Backend (Server)
+- **Framework**: FastAPI (Python)
+- **Architecture**: Domain-Driven Design (Routers -> Services -> Repositories)
+- **Storage**: Local JSON-based Document Store (`app/repositories/data/`). *Note: Designed with the Repository pattern, making it trivial to swap to PostgreSQL or MongoDB in the future.*
+- **Security**: JWT-based Authentication (HTTPBearer).
+- **PDF Generation**: ReportLab for A4 invoices.
+
+---
+
+## 🏁 Getting Started
+
+### 1. Start the Backend (FastAPI)
+
 ```bash
 cd backend
-uv sync
-cp .env.example .env   # then fill in GROQ_API_KEY
-
-uv run uvicorn app.main:app --reload --port 8000
+python -m venv .venv
+source .venv/bin/activate  # Or `.venv\Scripts\activate` on Windows
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Seed a starter catalog (optional):
-```bash
-uv run python -m app.scripts.seed_stock data/seed_stock.csv
-```
+The API will be available at `http://localhost:8000`. You can view the automatic Swagger documentation at `http://localhost:8000/docs`.
 
-Run tests:
-```bash
-uv run pytest
-```
+### 2. Start the Frontend (React + Vite)
 
-**Frontend:**
 ```bash
 cd frontend-next
 npm install
 npm run dev
 ```
-The frontend will start a local dev server (usually at `http://localhost:5173`) and connect to the backend at `http://localhost:8000`.
 
+The frontend will be available at `http://localhost:5173` (or the port Vite specifies).
 
-## Architecture notes
+### 3. Default Login
 
-- **Storage**: The app uses PostgreSQL via SQLAlchemy, with all models sitting behind a `*Repository` abstract interface (`app/repositories/*.py`). The application supports switching between a local JSON-file backend and PostgreSQL by changing the `*_storage_backend` environment variables in `.env` (`app/repositories/factory.py` manages the active instances).
-- **Extraction provider**: Handwriting extraction can use either Anthropic's Claude or Groq Vision, managed by the `ExtractionProvider` interface (`app/services/extraction_providers/`). You can configure the active provider using `EXTRACTION_PROVIDER=claude` in `.env`.
-- **Invoice rendering**: The app uses `WeasyPrint` for high-quality PDF rendering, with a fallback to `xhtml2pdf` if needed. The `InvoiceRenderer` interface in `app/services/invoice_renderers/` handles this switch.
+If you haven't registered a business yet, the system allows you to sign up directly from the login screen to create a new Tenant workspace.
 
-## What to hand to Claude Code for further work
+---
 
-Give it `PLAN.md` plus the relevant phase doc from `/docs` if you want to
-revisit a specific phase's behavior.
+## 📂 Project Structure
+
+```text
+Stock_Invoice/
+├── backend/
+│   ├── app/
+│   │   ├── main.py               # FastAPI application entrypoint
+│   │   ├── dependencies.py       # Dependency Injection container
+│   │   ├── routers/              # HTTP API Endpoints (Controllers)
+│   │   ├── services/             # Business Logic & Tax Math
+│   │   ├── repositories/         # Data Access Layer (JSON Store)
+│   │   ├── models/               # Internal Domain Models
+│   │   └── schemas/              # Pydantic Request/Response Models
+├── frontend-next/
+│   ├── src/
+│   │   ├── App.tsx               # Main Router & Layouts
+│   │   ├── pages/                # Page Components (QuickBill, Reports, etc.)
+│   │   ├── components/           # Shared UI Components
+│   │   ├── lib/                  # API Client & React Query Hooks
+│   │   └── index.css             # Tailwind Directives
+```
+
+## 🤝 Architecture Notes
+- **Tax Calculation**: Taxes are calculated at the item-level based on the product's `gst_rate`. Global discounts are pro-rated across all line items before tax is applied to ensure accurate GST compliance.
+- **Stock Movements**: Inventory is strictly tracked through an append-only `StockMovement` ledger (Purchases, Sales, Returns). 
+- **Tenancy**: The backend supports multi-tenancy. Every entity is tied to a `business_id`, ensuring secure data isolation between different shops using the same instance.

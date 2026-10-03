@@ -23,11 +23,13 @@ export interface StockItem {
   id: string;
   name: string;
   sku: string | null;
+  hsn_code: string | null;
   aliases: string[];
   unit: string;
   unit_price: number;
   quantity_available: number;
   low_stock_threshold: number;
+  gst_rate: number;
   created_at: string;
   updated_at: string;
 }
@@ -35,10 +37,12 @@ export interface StockItem {
 export interface StockInput {
   name: string;
   sku?: string | null;
+  hsn_code?: string | null;
   unit: string;
   unit_price: number;
   quantity_available: number;
   low_stock_threshold?: number;
+  gst_rate?: number;
   aliases?: string[];
 }
 
@@ -283,6 +287,12 @@ export const endpoints = {
 
   listStock: () =>
     apiJson<StockItem[]>('/stock'),
+
+  bulkPurchase: (input: { supplier_name?: string; items: { stock_id: string; qty: number; unit_cost?: number }[] }) =>
+    apiJson<{ status: string; items_processed: number }>('/stock/bulk-purchase', {
+      method: 'POST',
+      body: input,
+    }),
 
   listStockMovements: (id: string) =>
     apiJson<StockMovement[]>(`/stock/${id}/movements`),
