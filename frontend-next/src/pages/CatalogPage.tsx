@@ -971,8 +971,9 @@ function CatalogPage() {
           <Loading />
         </SectionCard>
       ) : shown.length ? (
-        <SectionCard className="overflow-hidden">
-          <div className="hidden grid-cols-[2fr_.6fr_.6fr_.6fr_.7fr_.8fr_120px] gap-4 border-b border-border bg-muted/45 px-5 py-3 mono text-[10px] uppercase tracking-wider text-muted-foreground sm:grid">
+        <div className="overflow-x-auto pb-4">
+        <SectionCard className="min-w-[900px] overflow-hidden">
+          <div className="grid grid-cols-[2fr_.6fr_.6fr_.6fr_.7fr_.8fr_120px] gap-4 border-b border-border bg-muted/45 px-5 py-3 mono text-[10px] uppercase tracking-wider text-muted-foreground">
             <span>Item</span>
             <span>SKU/HSN</span>
             <span>Unit</span>
@@ -986,7 +987,7 @@ function CatalogPage() {
               const low = Number(item.quantity_available) <= Number(item.low_stock_threshold);
               return (
                 <div
-                  className="grid gap-3 px-5 py-4 sm:grid-cols-[2fr_.6fr_.6fr_.6fr_.7fr_.8fr_120px] sm:items-center sm:gap-4"
+                  className="grid gap-4 px-5 py-4 grid-cols-[2fr_.6fr_.6fr_.6fr_.7fr_.8fr_120px] items-center"
                   key={item.id}
                   data-testid={`row-catalog-${item.id}`}
                 >
@@ -1043,6 +1044,7 @@ function CatalogPage() {
             })}
           </div>
         </SectionCard>
+        </div>
       ) : (
         <SectionCard>
           <EmptyState

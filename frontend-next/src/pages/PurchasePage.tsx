@@ -4,6 +4,7 @@ import { Search, PackagePlus, Info, Check, Trash2 } from 'lucide-react';
 import { PageHeading, SectionCard, ErrorNotice } from '../App';
 import { AppShell } from '../components/AppShell';
 import { useStock, endpoints, money } from '../lib/data';
+import { useToast } from '@/hooks/use-toast';
 
 const inputClass =
   'w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-1 focus:ring-primary';
@@ -72,6 +73,8 @@ export default function PurchasePage() {
 
   const totalQty = cart.reduce((acc, item) => acc + item.qty, 0);
 
+  const { toast } = useToast();
+
   const confirmPurchase = async () => {
     if (cart.length === 0) {
       setError('Add some items to stock in.');
@@ -89,7 +92,10 @@ export default function PurchasePage() {
         })),
       });
 
-      alert('Stock successfully updated!');
+      toast({
+        title: 'Stock Updated',
+        description: `Successfully added ${totalQty} items to inventory.`,
+      });
       setLocation('/catalog');
     } catch (err: any) {
       setError(err.message || 'Failed to process purchase.');

@@ -787,8 +787,11 @@ function ItemCombobox({
 }
 
 
+import { useToast } from '@/hooks/use-toast';
+
 function ReviewPage() {
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
   const stock = useStock();
   const [jobId, setJobId] = useState<string | null>(null);
   const [rows, setRows] = useState<ReviewRow[]>([]);
@@ -1137,6 +1140,11 @@ function ReviewPage() {
 
       sessionStorage.removeItem('sia-review');
 
+      toast({
+        title: 'Invoice Saved',
+        description: `Invoice created successfully for ${rows.length} items.`,
+      });
+
       setLocation(`/invoice/${transaction.invoice_id}`);
     } catch (e) {
       setError(
@@ -1234,9 +1242,10 @@ function ReviewPage() {
          * Review Items
          * --------------------------------------------------------- */}
 
-        <SectionCard className="overflow-hidden">
+        <div className="overflow-x-auto pb-4">
+        <SectionCard className="min-w-[1000px] overflow-hidden">
 
-          <div className="hidden grid-cols-[1.1fr_1.3fr_.5fr_.8fr_.8fr_.8fr_40px] gap-3 border-b border-border bg-muted/45 px-5 py-3 mono text-[10px] uppercase tracking-wider text-muted-foreground md:grid">
+          <div className="grid grid-cols-[1.1fr_1.3fr_.5fr_.8fr_.8fr_.8fr_40px] gap-3 border-b border-border bg-muted/45 px-5 py-3 mono text-[10px] uppercase tracking-wider text-muted-foreground">
             <span>Written as</span>
             <span>Catalog match</span>
             <span>Qty</span>
@@ -1269,7 +1278,7 @@ function ReviewPage() {
               return (
                 <div
                   key={row.id}
-                  className={`grid gap-4 px-4 py-5 md:grid-cols-[1.1fr_1.3fr_.5fr_.8fr_.8fr_.8fr_40px] md:items-center md:gap-3 md:px-5 ${
+                  className={`grid gap-4 px-4 py-5 grid-cols-[1.1fr_1.3fr_.5fr_.8fr_.8fr_.8fr_40px] items-center gap-3 px-5 ${
                     needsReview
                       ? 'bg-secondary/10'
                       : ''
@@ -1519,6 +1528,7 @@ function ReviewPage() {
           </div>
 
         </SectionCard>
+        </div>
 
         {/* -----------------------------------------------------------
          * Customer

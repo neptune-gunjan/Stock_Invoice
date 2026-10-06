@@ -202,15 +202,15 @@ class DashboardService:
 
         invoices = self._invoice_repository.list_all(business_id)
         
-        gross_sales = sum(float(i.subtotal) for i in invoices)
-        discounts_given = sum(float(i.discount) for i in invoices)
-        gst_collected = sum(float(i.tax_amount) for i in invoices)
+        gross_sales = sum(float(i.subtotal or 0.0) for i in invoices)
+        discounts_given = sum(float(i.discount or 0.0) for i in invoices)
+        gst_collected = sum(float(i.tax_amount or 0.0) for i in invoices)
         
         # Payment calculation
         total_payments_received = 0.0
         for invoice in invoices:
             payments = self._payment_repository.list_by_invoice(invoice.id)
-            total_payments_received += sum(float(p.amount) for p in payments)
+            total_payments_received += sum(float(p.amount or 0.0) for p in payments)
             
         net_sales = gross_sales - discounts_given
         total_outstanding = max((net_sales + gst_collected) - total_payments_received, 0)
@@ -221,9 +221,9 @@ class DashboardService:
         customer_stats = defaultdict(float)
 
         for inv in invoices:
-            transaction = transaction_repo.get(inv.transaction_id)
+            transaction = transaction_repo.get(business_id, inv.transaction_id)
             if transaction:
-                items = transaction_repo.list_items(transaction.id)
+                items = transaction_repo.list_items(business_id, transaction.id)
                 for item in items:
                     product_stats[item.stock_id]["qty"] += float(item.qty)
                     product_stats[item.stock_id]["rev"] += float(item.line_total)

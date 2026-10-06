@@ -699,9 +699,10 @@ function TransactionsPage() {
         {invoices.isLoading ? (
           <Loading />
         ) : rows.length ? (
-          <>
+          <div className="overflow-x-auto pb-4">
+          <div className="min-w-[800px]">
             {/* Desktop header */}
-            <div className="hidden grid-cols-[1.25fr_.75fr_.7fr_.7fr_.7fr_100px] gap-4 border-b border-border bg-muted/45 px-5 py-3 mono text-[10px] uppercase tracking-wider text-muted-foreground sm:grid">
+            <div className="grid grid-cols-[1.25fr_.75fr_.7fr_.7fr_.7fr_100px] gap-4 border-b border-border bg-muted/45 px-5 py-3 mono text-[10px] uppercase tracking-wider text-muted-foreground">
               <span>Invoice / Customer</span>
               <span>Date</span>
               <span>Total</span>
@@ -731,7 +732,7 @@ function TransactionsPage() {
                   <Link
                     href={`/invoice/${invoice.id}`}
                     key={invoice.id}
-                    className="grid gap-3 px-5 py-4 transition hover:bg-muted/45 sm:grid-cols-[1.25fr_.75fr_.7fr_.7fr_.7fr_100px] sm:items-center sm:gap-4"
+                    className="grid gap-4 px-5 py-4 transition hover:bg-muted/45 grid-cols-[1.25fr_.75fr_.7fr_.7fr_.7fr_100px] items-center"
                     data-testid={`link-transaction-${invoice.id}`}
                   >
                     {/* Invoice / Customer */}
@@ -791,7 +792,8 @@ function TransactionsPage() {
                 );
               })}
             </div>
-          </>
+          </div>
+          </div>
         ) : (
           <EmptyState
             title="No invoices found"
