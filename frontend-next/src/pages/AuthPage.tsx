@@ -63,7 +63,7 @@ import {
   type StockMovement,
   type WhatsAppSendResult,
 } from '@/lib/data';
-import './index.css';
+
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -91,20 +91,6 @@ const buttonQuiet =
  * Shared presentational pieces
  * ------------------------------------------------------------------------ */
 
-
-import AuthPage from './pages/AuthPage';
-import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword from './pages/ResetPassword';
-import Dashboard from './pages/Dashboard';
-import UploadPage from './pages/UploadPage';
-import ReviewPage from './pages/ReviewPage';
-import InvoicePage from './pages/InvoicePage';
-import CatalogPage from './pages/CatalogPage';
-import CustomersPage from './pages/CustomersPage';
-import CustomerDetailPage from './pages/CustomerDetailPage';
-import TransactionsPage from './pages/TransactionsPage';
-import BusinessPage from './pages/BusinessPage';
-import NotFound from './pages/NotFound';
 
 function PageHeading({
   eyebrow,
@@ -594,87 +580,220 @@ function PaymentPanel({
 }
 
 
-function RoutedErrorBoundary({ children }: { children: ReactNode }) {
-  const [location] = useLocation();
-  return <ErrorBoundary resetKey={location}>{children}</ErrorBoundary>;
-}
+function AuthPage() {
+  const [, setLocation] = useLocation();
+  const [signup, setSignup] = useState(false);
+  const [values, setValues] = useState({ name: '', shop: '', email: '', password: '', confirmPassword: '' });
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  useEffect(() => {
+    if (hasSession()) setLocation('/dashboard', { replace: true });
+  }, [setLocation]);
 
-function Routes() {
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (signup && (!values.name.trim() || !values.shop.trim()))
+      return setError('Add your name and shop name to continue.');
+    if (!values.email.includes('@')) return setError('Enter a valid email address.');
+    if (values.password.length < 8) return setError('Use at least 8 characters for your password.');
+    if (signup && values.password !== values.confirmPassword) return setError('Passwords do not match.');
+
+    setError('');
+    setBusy(true);
+    try {
+      if (signup) {
+        await signUp(values.name.trim(), values.shop.trim(), values.email.trim(), values.password);
+      } else {
+        await signIn(values.email.trim(), values.password);
+      }
+      setLocation('/dashboard');
+    } catch (e) {
+      setError(errorMessage(e, 'Authentication failed.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <RoutedErrorBoundary>
-      <Switch>
-        <Route path="/" component={AuthPage} />
-        <Route path="/forgot-password" component={ForgotPassword} />
-        <Route path="/reset-password" component={ResetPassword} />
-        <Route path="/dashboard">
-          <RequireAuth>
-            <Dashboard />
-          </RequireAuth>
-        </Route>
-        <Route path="/upload">
-          <RequireAuth>
-            <UploadPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/review">
-          <RequireAuth>
-            <ReviewPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/invoice/:invoiceId">
-          <RequireAuth>
-            <InvoicePage />
-          </RequireAuth>
-        </Route>
-        <Route path="/catalog">
-          <RequireAuth>
-            <CatalogPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/customers">
-          <RequireAuth>
-            <CustomersPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/business">
-          <RequireAuth>
-            <BusinessPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/customers/:customerId">
-          <RequireAuth>
-            <CustomerDetailPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/transactions">
-          <RequireAuth>
-            <TransactionsPage />
-          </RequireAuth>
-        </Route>
-        <Route component={NotFound} />
-      </Switch>
-    </RoutedErrorBoundary>
+    <div className="app-shell grid lg:grid-cols-[1.05fr_.95fr]">
+      <div className="paper-grid relative hidden overflow-hidden bg-primary p-12 text-primary-foreground lg:flex lg:flex-col lg:justify-between">
+        <Mark compact />
+        <div className="relative max-w-lg pb-8">
+          <div className="mb-7 flex items-center gap-2 mono text-[10px] uppercase tracking-[.2em] text-secondary">
+            <span className="h-px w-8 bg-secondary" /> Counter-side tools
+          </div>
+          <h1 className="text-6xl font-extrabold leading-[.94] tracking-[-.06em]">
+            Good notes.
+            <br />
+            <span className="text-secondary">Clear totals.</span>
+          </h1>
+          <p className="mt-7 max-w-md text-base leading-7 text-primary-foreground/70">
+            Turn the scribbles from your counter into invoices you can stand behind.
+          </p>
+          <div className="mt-12 grid grid-cols-3 gap-3 border-t border-primary-foreground/15 pt-5 text-xs text-primary-foreground/60">
+            <span>01 &nbsp; Capture</span>
+            <span>02 &nbsp; Check</span>
+            <span>03 &nbsp; Send</span>
+          </div>
+        </div>
+        <p className="mono text-[10px] uppercase tracking-[.16em] text-primary-foreground/45">
+          Stock &amp; invoice desk · made for the daily rush
+        </p>
+      </div>
+
+      <div className="flex flex-col bg-background px-6 py-8 sm:px-12 lg:px-[clamp(3rem,9vw,9rem)]">
+        <div className="flex items-center justify-between lg:justify-end">
+          <div className="lg:hidden">
+            <Mark />
+          </div>
+          <span className="mono text-[10px] uppercase tracking-[.15em] text-muted-foreground">Secure workspace</span>
+        </div>
+        <div className="my-auto w-full max-w-[420px] py-12">
+          <p className="mono mb-3 text-[10px] uppercase tracking-[.2em] text-muted-foreground">
+            {signup ? 'Set up your desk' : 'Welcome back'}
+          </p>
+          <h2 className="text-3xl font-extrabold tracking-[-.04em]">
+            {signup ? 'Start with the basics.' : 'Let’s get today in order.'}
+          </h2>
+          <form onSubmit={submit} className="mt-8 space-y-4">
+            {signup && (
+              <>
+                <label className="block text-sm font-bold">
+                  Your name
+                  <input
+                    autoComplete="name"
+                    className={`${inputClass} mt-2`}
+                    value={values.name}
+                    onChange={(e) => setValues({ ...values, name: e.target.value })}
+                    data-testid="input-owner-name"
+                    placeholder="Mara Iqbal"
+                  />
+                </label>
+                <label className="block text-sm font-bold">
+                  Shop name
+                  <input
+                    className={`${inputClass} mt-2`}
+                    value={values.shop}
+                    onChange={(e) => setValues({ ...values, shop: e.target.value })}
+                    data-testid="input-shop-name"
+                    placeholder="Juniper &amp; Co. Grocers"
+                  />
+                </label>
+              </>
+            )}
+            <label className="block text-sm font-bold">
+              Email address
+              <input
+                autoComplete="email"
+                type="email"
+                className={`${inputClass} mt-2`}
+                value={values.email}
+                onChange={(e) => setValues({ ...values, email: e.target.value })}
+                data-testid="input-email"
+                placeholder="you@yourshop.com"
+              />
+            </label>
+            <label className="block text-sm font-bold">
+              Password
+
+              <div className="relative mt-2">
+                <input
+                  autoComplete={signup ? 'new-password' : 'current-password'}
+                  type={showPassword ? 'text' : 'password'}
+                  className={`${inputClass} pr-12`}
+                  value={values.password}
+                  onChange={(e) => setValues({ ...values, password: e.target.value })}
+                  data-testid="input-password"
+                  placeholder="8+ characters"
+                />
+
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </label>
+            {signup && (
+              <label className="block text-sm font-bold">
+                Confirm password
+
+                <div className="relative mt-2">
+                  <input
+                    autoComplete="new-password"
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    className={`${inputClass} pr-12`}
+                    value={values.confirmPassword}
+                    onChange={(e) =>
+                      setValues({ ...values, confirmPassword: e.target.value })
+                    }
+                    data-testid="input-confirm-password"
+                    placeholder="Repeat your password"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword((prev) => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    aria-label={
+                      showConfirmPassword
+                        ? 'Hide confirm password'
+                        : 'Show confirm password'
+                    }
+                  >
+                    {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </label>
+            )}
+            {error && (
+              <p className="text-sm font-semibold text-destructive" data-testid="text-auth-error">
+                {error}
+              </p>
+            )}
+            <button className={`${buttonPrimary} w-full`} disabled={busy} data-testid="button-auth-submit">
+              {busy ? <Loader2 className="animate-spin" size={17} /> : null}
+              {signup ? 'Create workspace' : 'Sign in to workspace'}
+              {!busy && <ArrowRight size={17} />}
+            </button>
+          </form>
+          {!signup && (
+            <Link
+              href="/forgot-password"
+              className="mt-5 block text-center text-sm font-bold text-primary underline-offset-4 hover:underline"
+              data-testid="link-forgot-password"
+            >
+              Forgot password?
+            </Link>
+          )}
+          <div className="mt-10 border-t border-border pt-6 text-center text-sm text-muted-foreground">
+            {signup ? 'Already have a workspace?' : 'New to the desk?'}{' '}
+            <button
+              className="font-bold text-foreground underline underline-offset-4"
+              onClick={() => {
+                setSignup(!signup);
+                setError('');
+              }}
+              data-testid="button-toggle-auth"
+            >
+              {signup ? 'Sign in' : 'Create one'}
+            </button>
+          </div>
+        </div>
+        <div className="flex items-center justify-center gap-2 border-t border-border pt-5 text-[11px] text-muted-foreground">
+          <ShieldCheck size={14} className="text-[hsl(146_34%_45%)]" /> Your session is kept on this device only
+        </div>
+      </div>
+    </div>
   );
 }
 
-export function logout() {
-  clearSession();
-  location.assign('/');
-}
 
 
-function App() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-          <Routes />
-        </WouterRouter>
-        <Toaster />
-      </TooltipProvider>
-    </QueryClientProvider>
-  );
-}
-
-export default App;
+export default AuthPage;

@@ -63,7 +63,7 @@ import {
   type StockMovement,
   type WhatsAppSendResult,
 } from '@/lib/data';
-import './index.css';
+
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -91,20 +91,6 @@ const buttonQuiet =
  * Shared presentational pieces
  * ------------------------------------------------------------------------ */
 
-
-import AuthPage from './pages/AuthPage';
-import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword from './pages/ResetPassword';
-import Dashboard from './pages/Dashboard';
-import UploadPage from './pages/UploadPage';
-import ReviewPage from './pages/ReviewPage';
-import InvoicePage from './pages/InvoicePage';
-import CatalogPage from './pages/CatalogPage';
-import CustomersPage from './pages/CustomersPage';
-import CustomerDetailPage from './pages/CustomerDetailPage';
-import TransactionsPage from './pages/TransactionsPage';
-import BusinessPage from './pages/BusinessPage';
-import NotFound from './pages/NotFound';
 
 function PageHeading({
   eyebrow,
@@ -594,87 +580,243 @@ function PaymentPanel({
 }
 
 
-function RoutedErrorBoundary({ children }: { children: ReactNode }) {
-  const [location] = useLocation();
-  return <ErrorBoundary resetKey={location}>{children}</ErrorBoundary>;
-}
+function InvoicePage() {
+  const { invoiceId } = useParams<{ invoiceId: string }>();
+  const invoice = useInvoice(invoiceId);
+  const customers = useCustomers();
+  const [pdfError, setPdfError] = useState('');
+  const [downloading, setDownloading] = useState(false);
+  const { cancel } = useInvoiceMutations();
+  const [cancelError, setCancelError] = useState('');
 
+  const handleCancel = async () => {
+    if (!invoiceId || !invoice.data) return;
 
-function Routes() {
+    const confirmed = window.confirm(
+      `Cancel invoice ${invoice.data.invoice_number}?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setCancelError('');
+      await cancel.mutateAsync(invoiceId);
+    } catch (e) {
+      setCancelError(
+        errorMessage(e, 'Could not cancel the invoice.')
+      );
+    }
+  };
+  const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
+  const [whatsappError, setWhatsappError] = useState('');
+  const [whatsappResult, setWhatsappResult] = useState<WhatsAppSendResult | null>(null);
+
+  const customerName = useMemo(() => {
+    if (!invoice.data?.customer_id) return null;
+    return customers.data?.find((c) => c.id === invoice.data?.customer_id)?.name ?? 'Customer on file';
+  }, [invoice.data, customers.data]);
+
+  const download = async () => {
+    if (!invoiceId || !invoice.data) return;
+    setDownloading(true);
+    setPdfError('');
+    try {
+      const blob = await endpoints.invoicePdf(invoiceId);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `${invoice.data.invoice_number}.pdf`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setPdfError(errorMessage(e, 'PDF download failed.'));
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const sendWhatsapp = async () => {
+    if (!invoiceId) return;
+    setSendingWhatsapp(true);
+    setWhatsappError('');
+    setWhatsappResult(null);
+    try {
+      const result = await endpoints.sendInvoiceWhatsapp(invoiceId);
+      setWhatsappResult(result);
+    } catch (e) {
+      setWhatsappError(errorMessage(e, 'Could not send invoice over WhatsApp.'));
+    } finally {
+      setSendingWhatsapp(false);
+    }
+  };
+
+  if (invoice.isLoading) {
+    return (
+      <AppShell>
+        <Loading label="Loading invoice…" />
+      </AppShell>
+    );
+  }
+
+  if (invoice.isError || !invoice.data) {
+    return (
+      <AppShell>
+        <EmptyState
+          title="Invoice not found"
+          body={errorMessage(invoice.error, 'This invoice could not be loaded.')}
+          action={
+            <Link href="/transactions" className={buttonPrimary} data-testid="link-back-transactions">
+              View transactions
+            </Link>
+          }
+        />
+      </AppShell>
+    );
+  }
+
+  const data = invoice.data;
+
   return (
-    <RoutedErrorBoundary>
-      <Switch>
-        <Route path="/" component={AuthPage} />
-        <Route path="/forgot-password" component={ForgotPassword} />
-        <Route path="/reset-password" component={ResetPassword} />
-        <Route path="/dashboard">
-          <RequireAuth>
-            <Dashboard />
-          </RequireAuth>
-        </Route>
-        <Route path="/upload">
-          <RequireAuth>
-            <UploadPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/review">
-          <RequireAuth>
-            <ReviewPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/invoice/:invoiceId">
-          <RequireAuth>
-            <InvoicePage />
-          </RequireAuth>
-        </Route>
-        <Route path="/catalog">
-          <RequireAuth>
-            <CatalogPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/customers">
-          <RequireAuth>
-            <CustomersPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/business">
-          <RequireAuth>
-            <BusinessPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/customers/:customerId">
-          <RequireAuth>
-            <CustomerDetailPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/transactions">
-          <RequireAuth>
-            <TransactionsPage />
-          </RequireAuth>
-        </Route>
-        <Route component={NotFound} />
-      </Switch>
-    </RoutedErrorBoundary>
+    <AppShell>
+      <div className="mx-auto max-w-4xl">
+        <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <Link
+            href="/transactions"
+            className="inline-flex items-center gap-2 text-sm font-bold text-muted-foreground hover:text-foreground"
+            data-testid="link-back-history"
+          >
+            <ArrowLeft size={16} /> Transaction history
+          </Link>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={sendWhatsapp}
+              disabled={sendingWhatsapp}
+              className={buttonQuiet}
+              data-testid="button-send-whatsapp"
+            >
+              <MessageCircle size={16} /> {sendingWhatsapp ? 'Sending…' : 'Send via WhatsApp'}
+            </button>
+
+            <button
+              onClick={handleCancel}
+              disabled={cancel.isPending || data.status === 'cancelled'}
+              className={buttonQuiet}
+            >
+              {cancel.isPending ? (
+                <Loader2 className="animate-spin" size={16} />
+              ) : (
+                <X size={16} />
+              )}
+
+              {data.status === 'cancelled'
+                ? 'Cancelled'
+                : 'Cancel invoice'}
+            </button>
+
+            <button
+              onClick={download}
+              disabled={downloading}
+              className={buttonPrimary}
+              data-testid="button-download-pdf"
+            >
+              <Download size={16} />
+              {downloading ? 'Preparing…' : 'Download PDF'}
+            </button>
+          </div>
+        </div>
+        {pdfError && (
+          <div className="mb-4">
+            <ErrorNotice message={pdfError} />
+          </div>
+        )}
+        {whatsappError && (
+          <div className="mb-4">
+            <ErrorNotice message={whatsappError} />
+          </div>
+        )}
+        {whatsappResult && (
+          <div className="mb-4 rounded-xl border border-border bg-muted/35 px-4 py-3 text-sm">
+            {whatsappResult.document_sent ? 'Invoice PDF sent to the customer on WhatsApp.' : 'Could not deliver the PDF over WhatsApp.'}
+            {whatsappResult.payment_link_sent && ' Payment link sent too.'}
+            {!whatsappResult.whatsapp_configured && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                WhatsApp isn't connected yet — this was only logged, not actually sent. Add WHATSAPP_ACCESS_TOKEN /
+                WHATSAPP_PHONE_NUMBER_ID on the backend to send for real.
+              </p>
+            )}
+          </div>
+        )}
+        <PageHeading
+          eyebrow="Generated invoice"
+          title="Ready to share."
+          description={`Invoice ${data.invoice_number} · ${dateLabel(data.created_at)}`}
+        />
+        <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
+          <SectionCard className="overflow-hidden">
+            <div className="flex flex-col gap-5 border-b border-border bg-primary p-7 text-primary-foreground sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <div className="mb-6">
+                  <Mark compact />
+                </div>
+                <p className="text-xl font-extrabold">Invoice</p>
+                <p className="mt-1 mono text-xs text-primary-foreground/60">{data.invoice_number}</p>
+              </div>
+              <div className="sm:text-right">
+                <p className="mono text-[10px] uppercase tracking-[.16em] text-primary-foreground/50">Issued</p>
+                <p className="mt-2 text-sm font-bold">{dateLabel(data.created_at)}</p>
+                <p className="mt-5 text-sm text-primary-foreground/70">{customerName || 'Walk-in customer'}</p>
+              </div>
+            </div>
+            <div className="divide-y divide-border px-5 py-2">
+              {data.items.map((line, index) => (
+                <div
+                  className="grid grid-cols-[1fr_auto] gap-4 py-4 sm:grid-cols-[1fr_70px_100px_100px] sm:items-center"
+                  key={`${line.id}-${index}`}
+                >
+                  <div>
+                    <p className="text-sm font-bold">{line.stock_name}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {line.qty} {line.unit} · {money(line.unit_price)} each
+                    </p>
+                  </div>
+                  <span className="hidden text-right mono text-xs text-muted-foreground sm:block">{line.qty}</span>
+                  <span className="hidden text-right mono text-xs text-muted-foreground sm:block">{money(line.unit_price)}</span>
+                  <span className="mono text-sm font-medium">{money(line.line_total)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="space-y-1 border-t border-border bg-muted/35 px-5 py-5 text-sm">
+              <Row label="Subtotal" value={money(data.subtotal)} />
+              {data.discount > 0 && <Row label="Discount" value={`- ${money(data.discount)}`} />}
+              {data.tax_amount > 0 && <Row label={`Tax (${data.tax_rate}%)`} value={money(data.tax_amount)} />}
+              <div className="flex items-center justify-between pt-2">
+                <span className="font-bold">Grand total</span>
+                <span className="mono text-2xl">{money(data.total_amount)}</span>
+              </div>
+            </div>
+          </SectionCard>
+          <div className="space-y-4">
+            <SectionCard className="p-5">
+              <div className="mb-4 flex items-center gap-2 text-[hsl(146_34%_35%)]">
+                <ShieldCheck size={18} />
+                <span className="text-sm font-extrabold">Reviewed and confirmed</span>
+              </div>
+              <p className="text-xs leading-5 text-muted-foreground">
+                This invoice was checked against your catalog before it was saved.
+              </p>
+            </SectionCard>
+            <PaymentPanel
+              invoiceId={invoiceId}
+              paidAmount={data.paid_amount}
+              remainingAmount={data.remaining_amount}
+              paymentStatus={data.payment_status}
+            />
+          </div>
+        </div>
+      </div>
+    </AppShell>
   );
 }
 
-export function logout() {
-  clearSession();
-  location.assign('/');
-}
 
-
-function App() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-          <Routes />
-        </WouterRouter>
-        <Toaster />
-      </TooltipProvider>
-    </QueryClientProvider>
-  );
-}
-
-export default App;
+export default InvoicePage;

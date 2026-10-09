@@ -63,7 +63,7 @@ import {
   type StockMovement,
   type WhatsAppSendResult,
 } from '@/lib/data';
-import './index.css';
+
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -91,20 +91,6 @@ const buttonQuiet =
  * Shared presentational pieces
  * ------------------------------------------------------------------------ */
 
-
-import AuthPage from './pages/AuthPage';
-import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword from './pages/ResetPassword';
-import Dashboard from './pages/Dashboard';
-import UploadPage from './pages/UploadPage';
-import ReviewPage from './pages/ReviewPage';
-import InvoicePage from './pages/InvoicePage';
-import CatalogPage from './pages/CatalogPage';
-import CustomersPage from './pages/CustomersPage';
-import CustomerDetailPage from './pages/CustomerDetailPage';
-import TransactionsPage from './pages/TransactionsPage';
-import BusinessPage from './pages/BusinessPage';
-import NotFound from './pages/NotFound';
 
 function PageHeading({
   eyebrow,
@@ -594,87 +580,19 @@ function PaymentPanel({
 }
 
 
-function RoutedErrorBoundary({ children }: { children: ReactNode }) {
-  const [location] = useLocation();
-  return <ErrorBoundary resetKey={location}>{children}</ErrorBoundary>;
-}
-
-
-function Routes() {
+function NotFound() {
   return (
-    <RoutedErrorBoundary>
-      <Switch>
-        <Route path="/" component={AuthPage} />
-        <Route path="/forgot-password" component={ForgotPassword} />
-        <Route path="/reset-password" component={ResetPassword} />
-        <Route path="/dashboard">
-          <RequireAuth>
-            <Dashboard />
-          </RequireAuth>
-        </Route>
-        <Route path="/upload">
-          <RequireAuth>
-            <UploadPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/review">
-          <RequireAuth>
-            <ReviewPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/invoice/:invoiceId">
-          <RequireAuth>
-            <InvoicePage />
-          </RequireAuth>
-        </Route>
-        <Route path="/catalog">
-          <RequireAuth>
-            <CatalogPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/customers">
-          <RequireAuth>
-            <CustomersPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/business">
-          <RequireAuth>
-            <BusinessPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/customers/:customerId">
-          <RequireAuth>
-            <CustomerDetailPage />
-          </RequireAuth>
-        </Route>
-        <Route path="/transactions">
-          <RequireAuth>
-            <TransactionsPage />
-          </RequireAuth>
-        </Route>
-        <Route component={NotFound} />
-      </Switch>
-    </RoutedErrorBoundary>
+    <div className="app-shell grid place-items-center bg-background p-6 text-center">
+      <div>
+        <p className="mono text-xs text-muted-foreground">404 · nothing here</p>
+        <h1 className="mt-3 text-4xl font-extrabold tracking-[-.05em]">That shelf is empty.</h1>
+        <Link href="/dashboard" className={`${buttonPrimary} mt-6`} data-testid="link-not-found-home">
+          Back to overview
+        </Link>
+      </div>
+    </div>
   );
 }
 
-export function logout() {
-  clearSession();
-  location.assign('/');
-}
 
-
-function App() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-          <Routes />
-        </WouterRouter>
-        <Toaster />
-      </TooltipProvider>
-    </QueryClientProvider>
-  );
-}
-
-export default App;
+export default NotFound;

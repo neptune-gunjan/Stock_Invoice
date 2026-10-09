@@ -13,7 +13,7 @@ touching business logic.
 
 - `backend/app/` -- FastAPI app, one router/service/repository set per
   phase. See `docs/architecture.md` for the intended folder layout.
-- `frontend/index.html` -- single-file vanilla JS UI: upload an image,
+- `frontend-next/` -- React + Vite UI: upload an image,
   review/correct extracted + matched items, optionally attach a customer,
   confirm, download the PDF invoice.
 
@@ -25,7 +25,8 @@ cd backend
 uv sync
 cp .env.example .env   # then fill in GROQ_API_KEY
 
-```uv run uvicorn app.main:app --reload --port 8000
+uv run uvicorn app.main:app --reload --port 8000
+```
 
 Seed a starter catalog (optional):
 ```bash
@@ -38,27 +39,19 @@ uv run pytest
 ```
 
 **Frontend:**
-Open `frontend/index.html` directly in a browser. It calls the backend at
-`http://localhost:8000`.
+```bash
+cd frontend-next
+npm install
+npm run dev
+```
+The frontend will start a local dev server (usually at `http://localhost:5173`) and connect to the backend at `http://localhost:8000`.
 
-## Architecture notes (deviations from PLAN.md, and why)
 
-- **Storage**: JSON files under `backend/data/`, not Postgres. Every
-  entity (stock, extraction jobs, customers, transactions, ...) sits
-  behind a `*Repository` abstract interface (`app/repositories/*.py`);
-  concrete JSON-file implementations are the only thing that would need
-  replacing to move to Postgres -- `app/repositories/factory.py` is the
-  single composition root that would need a new branch per entity.
-- **Extraction provider**: Groq vision (`meta-llama/llama-4-scout-*` by
-  default), not Claude, behind an `ExtractionProvider` interface
-  (`app/services/extraction_providers/`). PLAN.md's "exactly one LLM call
-  in the whole system" rule still holds -- only
-  `groq_vision.py` imports the `groq` client.
-- **Invoice rendering**: `xhtml2pdf`, not WeasyPrint -- WeasyPrint needs
-  native Pango/GObject libraries not present on stock Windows, and
-  installing a system GTK runtime wasn't something to do unattended. Same
-  seam either way: `InvoiceRenderer` interface in
-  `app/services/invoice_renderers/`.
+## Architecture notes
+
+- **Storage**: The app uses PostgreSQL via SQLAlchemy, with all models sitting behind a `*Repository` abstract interface (`app/repositories/*.py`). The application supports switching between a local JSON-file backend and PostgreSQL by changing the `*_storage_backend` environment variables in `.env` (`app/repositories/factory.py` manages the active instances).
+- **Extraction provider**: Handwriting extraction can use either Anthropic's Claude or Groq Vision, managed by the `ExtractionProvider` interface (`app/services/extraction_providers/`). You can configure the active provider using `EXTRACTION_PROVIDER=claude` in `.env`.
+- **Invoice rendering**: The app uses `WeasyPrint` for high-quality PDF rendering, with a fallback to `xhtml2pdf` if needed. The `InvoiceRenderer` interface in `app/services/invoice_renderers/` handles this switch.
 
 ## What to hand to Claude Code for further work
 

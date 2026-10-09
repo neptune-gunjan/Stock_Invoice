@@ -1,0 +1,1591 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useEffect, useMemo, useState, type ChangeEvent, type DragEvent, type FormEvent, type ReactNode } from 'react';
+import { Link, Route, Router as WouterRouter, Switch, useLocation, useParams } from 'wouter';
+import {
+  AlertCircle,
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Download,
+  FileImage,
+  FilePlus2,
+  Filter,
+  Loader2,
+  MessageCircle,
+  Pencil,
+  Plus,
+  ReceiptText,
+  Search,
+  ShieldCheck,
+  Trash2,
+  UploadCloud,
+  X,
+  Save,
+  Store,
+  UserPlus,
+  History,
+  PackagePlus,
+  Eye,
+  EyeOff
+} from 'lucide-react';
+import { Toaster } from '@/components/ui/toaster';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { ErrorBoundary } from '@/components/error-boundary';
+import { AppShell, Mark } from '@/components/AppShell';
+import { ApiError, apiJson } from '@/lib/api';
+import { clearSession, hasSession, sendPasswordReset, signIn, signUp } from '@/lib/auth';
+import {
+  endpoints,
+  money,
+  useCustomers,
+  useDashboard,
+  useDashboardSales,
+  useExtractionJob,
+  useInvoice,
+  useInvoices,
+  useLowStock,
+  useProfile,
+  useRecentInvoices,
+  useStock,
+  useStockMutations,
+  useStockMovements,
+  useInvoicePayments,
+  useInvoiceMutations,
+  useCustomerTransactions,
+  useCustomerLedger,
+  Customer,
+  useBusiness,
+  useBusinessMutations,
+  useImportStock,
+  type ExtractedItem,
+  type StockInput,
+  type StockItem,
+  type StockMovement,
+  type WhatsAppSendResult,
+} from '@/lib/data';
+
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 15_000 },
+  },
+});
+
+const dateLabel = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
+};
+
+const errorMessage = (error: unknown, fallback: string) =>
+  error instanceof ApiError || error instanceof Error ? error.message : fallback;
+
+const inputClass =
+  'min-h-11 w-full rounded-xl border border-input bg-card px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10';
+const buttonPrimary =
+  'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground transition hover:brightness-110 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50';
+const buttonQuiet =
+  'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-bold text-foreground transition hover:bg-muted active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50';
+
+/* ---------------------------------------------------------------------------
+ * Shared presentational pieces
+ * ------------------------------------------------------------------------ */
+
+
+function PageHeading({
+  eyebrow,
+  title,
+  description,
+  action,
+}: {
+  eyebrow: string;
+  title: string;
+  description?: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+      <div className="rise-in">
+        <p className="mono mb-2 text-[10px] font-medium uppercase tracking-[.2em] text-muted-foreground">{eyebrow}</p>
+        <h1 className="text-3xl font-extrabold tracking-[-.04em] text-foreground md:text-[38px]">{title}</h1>
+        {description && <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">{description}</p>}
+      </div>
+      {action && <div className="rise-in">{action}</div>}
+    </div>
+  );
+}
+
+
+function SectionCard({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return (
+    <section
+      className={`rounded-2xl border border-border bg-card shadow-[0_10px_30px_hsl(164_22%_18%_/.04)] ${className}`}
+    >
+      {children}
+    </section>
+  );
+}
+
+
+function EmptyState({ title, body, action }: { title: string; body: string; action?: ReactNode }) {
+  return (
+    <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+      <div className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-muted text-primary">
+        <ReceiptText size={22} />
+      </div>
+      <h3 className="font-bold">{title}</h3>
+      <p className="mt-1 max-w-sm text-sm leading-6 text-muted-foreground">{body}</p>
+      {action && <div className="mt-5">{action}</div>}
+    </div>
+  );
+}
+
+
+function ErrorNotice({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  return (
+    <div className="flex items-start gap-3 rounded-xl border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive">
+      <AlertCircle className="mt-0.5 shrink-0" size={18} />
+      <div>
+        <p className="font-bold">Something went wrong</p>
+        <p className="mt-1 text-destructive/80">{message}</p>
+        {onRetry && (
+          <button className="mt-3 font-bold underline" onClick={onRetry} data-testid="button-retry">
+            Try again
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+function Loading({ label = 'Loading…' }: { label?: string }) {
+  return (
+    <div className="flex items-center justify-center gap-3 px-6 py-16 text-sm text-muted-foreground">
+      <Loader2 className="animate-spin" size={18} /> {label}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------------
+ * Auth
+ * ------------------------------------------------------------------------ */
+
+
+function RequireAuth({ children }: { children: ReactNode }) {
+  const [, setLocation] = useLocation();
+  const authed = hasSession();
+  useEffect(() => {
+    if (!authed) setLocation('/', { replace: true });
+  }, [authed, setLocation]);
+  return authed ? <>{children}</> : null;
+}
+
+
+function SalesChart({
+  data,
+  isLoading,
+  isError,
+  onRetry,
+}: {
+  data: { date: string; sales: string | number }[];
+  isLoading: boolean;
+  isError: boolean;
+  onRetry: () => void;
+}) {
+  const chartData = useMemo(
+    () =>
+      data.slice(-7).map((item) => ({
+        date: item.date,
+        value: Number(item.sales || 0),
+      })),
+    [data],
+  );
+
+  const maxValue = Math.max(
+    ...chartData.map((item) => item.value),
+    1,
+  );
+
+  const totalSales = chartData.reduce(
+    (sum, item) => sum + item.value,
+    0,
+  );
+
+  const points = chartData.map((item, index) => {
+    const x =
+      chartData.length === 1
+        ? 50
+        : (index / (chartData.length - 1)) * 100;
+
+    const y = 90 - (item.value / maxValue) * 70;
+
+    return {
+      ...item,
+      x,
+      y,
+    };
+  });
+
+  const linePoints = points
+    .map((point) => `${point.x},${point.y}`)
+    .join(' ');
+
+  return (
+    <SectionCard className="overflow-hidden">
+      <div className="flex flex-col gap-3 border-b border-border px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">
+            Sales overview
+          </p>
+
+          <h2 className="mt-2 text-xl font-extrabold">
+            Recent sales
+          </h2>
+
+          <p className="mt-1 text-xs text-muted-foreground">
+            Last 7 available days
+          </p>
+        </div>
+
+        <div className="sm:text-right">
+          <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            Total sales
+          </p>
+
+          <p className="mt-1 mono text-2xl font-bold">
+            {money(totalSales)}
+          </p>
+        </div>
+      </div>
+
+      {isLoading && <Loading label="Loading sales…" />}
+
+      {!isLoading && isError && (
+        <div className="p-5">
+          <ErrorNotice
+            message="Could not load sales data."
+            onRetry={onRetry}
+          />
+        </div>
+      )}
+
+      {!isLoading && !isError && chartData.length === 0 && (
+        <div className="px-5 py-12 text-center">
+          <p className="text-sm font-bold">
+            No sales data yet
+          </p>
+
+          <p className="mt-1 text-xs text-muted-foreground">
+            Your sales trend will appear here after invoices are created.
+          </p>
+        </div>
+      )}
+
+      {!isLoading && !isError && chartData.length > 0 && (
+        <div className="p-5">
+          <div className="relative h-64 w-full">
+            <svg
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+              className="h-full w-full"
+              role="img"
+              aria-label="Sales chart"
+            >
+              {/* Grid */}
+              <line
+                x1="0"
+                y1="20"
+                x2="100"
+                y2="20"
+                className="stroke-border"
+                strokeWidth="1"
+                vectorEffect="non-scaling-stroke"
+              />
+
+              <line
+                x1="0"
+                y1="55"
+                x2="100"
+                y2="55"
+                className="stroke-border"
+                strokeWidth="1"
+                vectorEffect="non-scaling-stroke"
+              />
+
+              <line
+                x1="0"
+                y1="90"
+                x2="100"
+                y2="90"
+                className="stroke-border"
+                strokeWidth="1"
+                vectorEffect="non-scaling-stroke"
+              />
+
+              {/* Area */}
+              {points.length > 1 && (
+                <polygon
+                  points={`0,90 ${linePoints} 100,90`}
+                  className="fill-primary/10"
+                />
+              )}
+
+              {/* Line */}
+              {points.length > 1 && (
+                <polyline
+                  points={linePoints}
+                  fill="none"
+                  className="stroke-primary"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  vectorEffect="non-scaling-stroke"
+                />
+              )}
+
+              {/* Points */}
+              {points.map((point) => (
+                <circle
+                  key={point.date}
+                  cx={point.x}
+                  cy={point.y}
+                  r="2"
+                  className="fill-primary"
+                >
+                  <title>
+                    {dateLabel(point.date)} · {money(point.value)}
+                  </title>
+                </circle>
+              ))}
+            </svg>
+          </div>
+
+          {/* Dates */}
+          <div
+            className="mt-3 grid gap-2"
+            style={{
+              gridTemplateColumns: `repeat(${chartData.length}, minmax(0, 1fr))`,
+            }}
+          >
+            {chartData.map((item) => (
+              <div
+                key={item.date}
+                className="text-center"
+              >
+                <p className="mono text-[9px] uppercase tracking-wide text-muted-foreground">
+                  {new Intl.DateTimeFormat('en', {
+                    month: 'short',
+                    day: 'numeric',
+                  }).format(new Date(item.date))}
+                </p>
+
+                <p className="mt-1 mono text-[10px] font-bold">
+                  {money(item.value)}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+/* ---------------------------------------------------------------------------
+ * Dashboard
+ * ------------------------------------------------------------------------ */
+
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between text-muted-foreground">
+      <span>{label}</span>
+      <span className="mono">{value}</span>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------------
+ * Catalog (stock CRUD)
+ * ------------------------------------------------------------------------ */
+
+const blankForm = { name: '', sku: '', unit: '', unit_price: '', quantity_available: '', low_stock_threshold: '', aliases: '' };
+
+
+function PaymentPanel({
+  invoiceId,
+  paidAmount,
+  remainingAmount,
+  paymentStatus,
+}: {
+  invoiceId: string;
+  paidAmount: number;
+  remainingAmount: number;
+  paymentStatus: string;
+}) {
+  const payments = useInvoicePayments(invoiceId);
+  const { addPayment } = useInvoiceMutations();
+
+  const [amount, setAmount] = useState('');
+  const [method, setMethod] = useState('cash');
+  const [error, setError] = useState('');
+
+  const submit = async () => {
+    const value = Number(amount);
+
+    if (!value || value <= 0) {
+      setError('Enter a valid payment amount.');
+      return;
+    }
+
+    if (value > remainingAmount) {
+      setError('Payment cannot be greater than the remaining amount.');
+      return;
+    }
+
+    setError('');
+
+    try {
+      await addPayment.mutateAsync({
+        invoiceId,
+        input: {
+          amount: value,
+          payment_method: method,
+        },
+      });
+
+      setAmount('');
+    } catch (e) {
+      setError(errorMessage(e, 'Could not add payment.'));
+    }
+  };
+
+  return (
+    <SectionCard className="p-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="mono text-[10px] uppercase tracking-[.17em] text-muted-foreground">
+            Payment
+          </p>
+
+          <p className="mt-3 font-bold capitalize">
+            {paymentStatus.toLowerCase() === 'paid'
+              ? 'paid'
+              : 'pending'}
+          </p>
+        </div>
+
+        <span className="mono text-lg">
+          {money(
+            paymentStatus.toLowerCase() === 'paid'
+              ? paidAmount
+              : remainingAmount
+          )}
+        </span>
+      </div>
+
+      <p className="mt-1 text-xs text-muted-foreground">
+        {money(paidAmount)} paid · {money(remainingAmount)} due
+      </p>
+
+      {remainingAmount > 0 && (
+        <div className="mt-5 space-y-3">
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            max={remainingAmount}
+            className={inputClass}
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="Payment amount"
+          />
+
+          <select
+            className={inputClass}
+            value={method}
+            onChange={(e) => setMethod(e.target.value)}
+          >
+            <option value="cash">Cash</option>
+            <option value="upi">UPI</option>
+            <option value="card">Card</option>
+            <option value="bank_transfer">Bank transfer</option>
+          </select>
+
+          {error && (
+            <p className="text-sm font-semibold text-destructive">
+              {error}
+            </p>
+          )}
+
+          <button
+            onClick={submit}
+            disabled={addPayment.isPending}
+            className={`${buttonPrimary} w-full`}
+          >
+            {addPayment.isPending ? (
+              <>
+                <Loader2 className="animate-spin" size={16} />
+                Saving…
+              </>
+            ) : (
+              <>
+                <Check size={16} />
+                Add payment
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      <div className="mt-5 border-t border-border pt-4">
+        <p className="mono text-[10px] uppercase tracking-[.17em] text-muted-foreground">
+          Payment history
+        </p>
+
+        {payments.isLoading ? (
+          <Loading label="Loading payments…" />
+        ) : payments.data?.length ? (
+          <div className="mt-3 space-y-3">
+            {payments.data.map((payment) => (
+              <div
+                key={payment.id}
+                className="flex items-center justify-between rounded-xl bg-muted/40 px-3 py-3"
+              >
+                <div>
+                  <p className="text-sm font-bold capitalize">
+                    {payment.payment_method}
+                  </p>
+
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {dateLabel(payment.created_at)}
+                  </p>
+                </div>
+
+                <span className="mono text-sm">
+                  {money(payment.amount)}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 text-xs text-muted-foreground">
+            No payments recorded yet.
+          </p>
+        )}
+      </div>
+    </SectionCard>
+  );
+}
+
+
+function CustomerDetailPage() {
+  const { customerId } = useParams<{ customerId: string }>();
+
+  const customers = useCustomers();
+  const transactions = useCustomerTransactions(customerId);
+  const ledger = useCustomerLedger(customerId);
+
+  const customer = customers.data?.find(
+    (item) => item.id === customerId,
+  );
+
+  const customerInvoices = transactions.data ?? [];
+
+  // Find most recent payment across all invoices
+  const paymentsWithDates = customerInvoices
+    .filter(
+      (invoice) =>
+        invoice.last_payment_at &&
+        Number(invoice.last_payment_amount || 0) > 0,
+    )
+    .sort(
+      (a, b) =>
+        new Date(b.last_payment_at!).getTime() -
+        new Date(a.last_payment_at!).getTime(),
+    );
+
+  const lastPayment = paymentsWithDates[0] ?? null;
+
+  const [paymentInvoice, setPaymentInvoice] =
+    useState<string | null>(null);
+
+  const [paymentAmount, setPaymentAmount] = useState('');
+
+  const [paymentMethod, setPaymentMethod] =
+    useState('cash');
+
+  const [paymentError, setPaymentError] = useState('');
+
+  const [paymentSaving, setPaymentSaving] =
+    useState(false);
+
+  const totalPurchase = customerInvoices.reduce(
+    (sum, invoice) =>
+      sum + Number(invoice.total_amount || 0),
+    0,
+  );
+
+  const paidAmount = customerInvoices.reduce(
+    (sum, invoice) =>
+      sum + Number(invoice.paid_amount || 0),
+    0,
+  );
+
+  const remainingAmount = customerInvoices.reduce(
+    (sum, invoice) =>
+      sum + Number(invoice.remaining_amount || 0),
+    0,
+  );
+
+  const creditLimit = Number(
+    customer?.credit_limit ?? 0,
+  );
+
+  const availableCredit = Math.max(
+    creditLimit - remainingAmount,
+    0,
+  );
+
+  const dueInvoices = customerInvoices.filter(
+    (invoice) =>
+      Number(invoice.remaining_amount || 0) > 0,
+  );
+
+  const overdueInvoices = dueInvoices.filter(
+    (invoice) => {
+      const createdDate = new Date(
+        invoice.created_at,
+      );
+
+      const dueDate = new Date(createdDate);
+
+      dueDate.setDate(
+        dueDate.getDate() +
+          (customer?.payment_terms_days ?? 0),
+      );
+
+      const today = new Date();
+
+      today.setHours(0, 0, 0, 0);
+      dueDate.setHours(0, 0, 0, 0);
+
+      return dueDate.getTime() < today.getTime();
+    },
+  );
+
+  const overdueAmount = overdueInvoices.reduce(
+    (sum, invoice) =>
+      sum + Number(invoice.remaining_amount || 0),
+    0,
+  );
+
+  const currentDueAmount = Math.max(
+    remainingAmount - overdueAmount,
+    0,
+  );
+
+  const getDueStatus = (
+    invoiceCreatedAt: string,
+    dueDays: number,
+    remaining: number,
+  ) => {
+    // Fully paid invoice
+    if (remaining <= 0) {
+      return {
+        label: 'Paid',
+        className: 'text-muted-foreground',
+      };
+    }
+
+    const createdDate = new Date(invoiceCreatedAt);
+
+    const dueDate = new Date(createdDate);
+    dueDate.setDate(
+      dueDate.getDate() + dueDays,
+    );
+
+    const today = new Date();
+
+    // Compare dates only, not time
+    today.setHours(0, 0, 0, 0);
+    dueDate.setHours(0, 0, 0, 0);
+
+    const diffMs =
+      dueDate.getTime() - today.getTime();
+
+    const diffDays = Math.ceil(
+      diffMs / (1000 * 60 * 60 * 24),
+    );
+
+    if (diffDays < 0) {
+      const overdueDays = Math.abs(diffDays);
+
+      return {
+        label: `${overdueDays} ${
+          overdueDays === 1 ? 'day' : 'days'
+        } overdue`,
+        className: 'font-bold text-destructive',
+      };
+    }
+
+    if (diffDays === 0) {
+      return {
+        label: 'Due today',
+        className: 'font-bold text-destructive',
+      };
+    }
+
+    return {
+      label: `Due in ${diffDays} ${
+        diffDays === 1 ? 'day' : 'days'
+      }`,
+      className: 'font-bold text-foreground',
+    };
+  };
+
+  const submitRetailerPayment = async (
+    invoiceId: string,
+    remaining: number,
+  ) => {
+    const amount = Number(paymentAmount);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setPaymentError(
+        'Enter a valid payment amount.',
+      );
+      return;
+    }
+
+    if (amount > remaining) {
+      setPaymentError(
+        'Payment cannot be greater than the outstanding amount.',
+      );
+      return;
+    }
+
+    setPaymentSaving(true);
+    setPaymentError('');
+
+    try {
+      await endpoints.addPayment(invoiceId, {
+        amount,
+        payment_method: paymentMethod,
+      });
+
+      setPaymentAmount('');
+      setPaymentInvoice(null);
+
+      await Promise.all([
+        transactions.refetch(),
+        ledger.refetch(),
+      ]);
+    } catch (e) {
+      setPaymentError(
+        errorMessage(
+          e,
+          'Could not record payment.',
+        ),
+      );
+    } finally {
+      setPaymentSaving(false);
+    }
+  };
+
+  if (customers.isLoading) {
+    return (
+      <AppShell>
+        <Loading label="Loading retailer…" />
+      </AppShell>
+    );
+  }
+
+  if (!customer) {
+    return (
+      <AppShell>
+        <EmptyState
+          title="Retailer not found"
+          body="This retailer could not be found."
+          action={
+            <Link
+              href="/customers"
+              className={buttonPrimary}
+            >
+              <ArrowLeft size={16} />
+              Back to retailers
+            </Link>
+          }
+        />
+      </AppShell>
+    );
+  }
+
+  return (
+    <AppShell>
+      <div className="mx-auto max-w-6xl">
+
+        {/* Back */}
+        <Link
+          href="/customers"
+          className="mb-7 inline-flex items-center gap-2 text-sm font-bold text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft size={16} />
+          Retailers
+        </Link>
+
+        {/* Header */}
+        <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+
+            <div className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-primary text-xl font-extrabold text-primary-foreground">
+              {customer.name
+                ?.trim()
+                ?.charAt(0)
+                ?.toUpperCase() || '?'}
+            </div>
+
+            <div className="min-w-0">
+
+              <p className="mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">
+                Retailer
+              </p>
+
+              <h1 className="mt-1 truncate text-3xl font-extrabold tracking-[-.04em]">
+                {customer.name}
+              </h1>
+
+              <p className="mt-1 text-sm text-muted-foreground">
+                {customer.business_name ||
+                  customer.phone ||
+                  'Retailer profile'}
+              </p>
+
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/upload"
+              className={buttonPrimary}
+            >
+              <FilePlus2 size={16} />
+              New invoice
+            </Link>
+          </div>
+        </div>
+
+        {/* Retailer profile */}
+        <SectionCard className="mb-7 p-5">
+
+          <div className="mb-5">
+            <p className="mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">
+              Retailer profile
+            </p>
+
+            <h2 className="mt-1 text-lg font-extrabold">
+              Business information
+            </h2>
+          </div>
+
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+
+            <div>
+              <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                Business name
+              </p>
+
+              <p className="mt-2 text-sm font-bold">
+                {customer.business_name || '—'}
+              </p>
+            </div>
+
+            <div>
+              <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                Phone
+              </p>
+
+              <p className="mt-2 text-sm font-bold">
+                {customer.phone || '—'}
+              </p>
+            </div>
+
+            <div>
+              <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                GST number
+              </p>
+
+              <p className="mt-2 text-sm font-bold">
+                {customer.gst_number || '—'}
+              </p>
+            </div>
+
+            <div>
+              <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                Payment terms
+              </p>
+
+              <p className="mt-2 text-sm font-bold">
+                {customer.payment_terms_days ?? 0} days
+              </p>
+            </div>
+
+            <div className="sm:col-span-2 lg:col-span-4">
+              <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                Address
+              </p>
+
+              <p className="mt-2 text-sm font-medium">
+                {customer.address ||
+                  'No address added'}
+              </p>
+            </div>
+
+          </div>
+        </SectionCard>
+
+        {/* Financial stats */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+
+          <SectionCard className="p-5">
+            <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              Invoices
+            </p>
+
+            <p className="mt-5 text-3xl font-extrabold">
+              {customerInvoices.length}
+            </p>
+
+            <p className="mt-1 text-xs text-muted-foreground">
+              Total invoices
+            </p>
+          </SectionCard>
+
+          <SectionCard className="p-5">
+            <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              Purchases
+            </p>
+
+            <p className="mt-5 text-3xl font-extrabold">
+              {money(totalPurchase)}
+            </p>
+
+            <p className="mt-1 text-xs text-muted-foreground">
+              Lifetime purchase
+            </p>
+          </SectionCard>
+
+          <SectionCard className="p-5">
+            <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              Paid
+            </p>
+
+            <p className="mt-5 text-3xl font-extrabold">
+              {money(paidAmount)}
+            </p>
+
+            <p className="mt-1 text-xs text-muted-foreground">
+              Amount received
+            </p>
+          </SectionCard>
+
+          <SectionCard className="border-secondary/70 bg-secondary/10 p-5">
+            <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              Outstanding
+            </p>
+
+            <p className="mt-5 text-3xl font-extrabold">
+              {money(remainingAmount)}
+            </p>
+
+            <p className="mt-1 text-xs text-muted-foreground">
+              Amount due
+            </p>
+          </SectionCard>
+
+          <SectionCard className="p-5">
+            <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              Available credit
+            </p>
+
+            <p className="mt-5 text-3xl font-extrabold">
+              {money(availableCredit)}
+            </p>
+
+            <p className="mt-1 text-xs text-muted-foreground">
+              Of {money(creditLimit)} limit
+            </p>
+          </SectionCard>
+
+        </div>
+
+        {/* Credit summary */}
+        <SectionCard className="mt-7 p-5">
+
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+
+            <div>
+
+              <p className="mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">
+                Credit account
+              </p>
+
+              <h2 className="mt-1 text-lg font-extrabold">
+                Credit utilization
+              </h2>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                {money(remainingAmount)} outstanding against a{' '}
+                {money(creditLimit)} credit limit.
+              </p>
+
+            </div>
+
+            <div className="text-left sm:text-right">
+
+              <p className="text-2xl font-extrabold">
+                {creditLimit > 0
+                  ? `${Math.min(
+                      (remainingAmount /
+                        creditLimit) *
+                        100,
+                      100,
+                    ).toFixed(0)}%`
+                  : '0%'}
+              </p>
+
+              <p className="text-xs text-muted-foreground">
+                Credit utilized
+              </p>
+
+            </div>
+
+          </div>
+
+          <div className="mt-5 h-3 overflow-hidden rounded-full bg-muted">
+
+            <div
+              className="h-full rounded-full bg-primary transition-all"
+              style={{
+                width:
+                  creditLimit > 0
+                    ? `${Math.min(
+                        (remainingAmount /
+                          creditLimit) *
+                          100,
+                        100,
+                      )}%`
+                    : '0%',
+              }}
+            />
+
+          </div>
+
+          <div className="mt-3 flex justify-between text-xs text-muted-foreground">
+
+            <span>
+              Outstanding: {money(remainingAmount)}
+            </span>
+
+            <span>
+              Available: {money(availableCredit)}
+            </span>
+
+          </div>
+
+        </SectionCard>
+
+        {/* Due overview */}
+        <SectionCard className="mt-7 p-5">
+
+          <div className="mb-5">
+            <p className="mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">
+              Outstanding overview
+            </p>
+
+            <h2 className="mt-1 text-lg font-extrabold">
+              Due management
+            </h2>
+
+            <p className="mt-1 text-xs text-muted-foreground">
+              Track unpaid, overdue, and upcoming retailer dues.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+
+            {/* Total due */}
+            <div className="rounded-xl border border-border bg-muted/20 p-4">
+              <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                Total due
+              </p>
+
+              <p className="mt-3 text-2xl font-extrabold">
+                {money(remainingAmount)}
+              </p>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                All outstanding invoices
+              </p>
+            </div>
+
+            {/* Overdue */}
+            <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4">
+              <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                Overdue
+              </p>
+
+              <p className="mt-3 text-2xl font-extrabold text-destructive">
+                {money(overdueAmount)}
+              </p>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                Past payment terms
+              </p>
+            </div>
+
+            {/* Current due */}
+            <div className="rounded-xl border border-border bg-muted/20 p-4">
+              <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                Current due
+              </p>
+
+              <p className="mt-3 text-2xl font-extrabold">
+                {money(currentDueAmount)}
+              </p>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                Not overdue yet
+              </p>
+            </div>
+
+          </div>
+
+        </SectionCard>
+
+        {/* Invoice-wise due management */}
+        <SectionCard className="mt-7 p-5">
+          <div className="mb-5">
+            <p className="mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">
+              Invoice dues
+            </p>
+
+            <h2 className="mt-1 text-lg font-extrabold">
+              Outstanding invoices
+            </h2>
+
+            <p className="mt-1 text-xs text-muted-foreground">
+              Review unpaid invoices and record retailer payments.
+            </p>
+          </div>
+
+          {dueInvoices.length === 0 ? (
+            <div className="rounded-xl border border-border bg-muted/20 p-6 text-center">
+              <p className="text-sm font-semibold">
+                No outstanding invoices
+              </p>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                This retailer has no pending payment.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {[...dueInvoices]
+                .sort((a, b) => {
+                  const aCreated = new Date(a.created_at).getTime();
+                  const bCreated = new Date(b.created_at).getTime();
+
+                  return aCreated - bCreated;
+                })
+                .map((invoice) => {
+                  const dueStatus = getDueStatus(
+                    invoice.created_at,
+                    customer?.payment_terms_days ?? 0,
+                    Number(invoice.remaining_amount || 0),
+                  );
+
+                  return (
+                    <div
+                      key={invoice.id}
+                      className="rounded-xl border border-border p-4"
+                    >
+                      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-3">
+                            <p className="font-bold">
+                              {invoice.invoice_number}
+                            </p>
+
+                            <span
+                              className={`text-xs ${dueStatus.className}`}
+                            >
+                              {dueStatus.label}
+                            </span>
+                          </div>
+
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {new Date(
+                              invoice.created_at,
+                            ).toLocaleDateString()}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-6">
+                          <div className="text-right">
+                            <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                              Invoice
+                            </p>
+
+                            <p className="mt-1 font-bold">
+                              {money(
+                                Number(
+                                  invoice.total_amount || 0,
+                                ),
+                              )}
+                            </p>
+                          </div>
+
+                          <div className="text-right">
+                            <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                              Outstanding
+                            </p>
+
+                            <p className="mt-1 font-extrabold">
+                              {money(
+                                Number(
+                                  invoice.remaining_amount || 0,
+                                ),
+                              )}
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            className="rounded-lg border border-border px-3 py-2 text-xs font-bold hover:bg-muted"
+                            onClick={() => {
+                              setPaymentInvoice(invoice.id);
+                              setPaymentAmount(
+                                String(
+                                  Number(
+                                    invoice.remaining_amount || 0,
+                                  ),
+                                ),
+                              );
+                              setPaymentMethod('cash');
+                              setPaymentError('');
+                            }}
+                          >
+                            Record payment
+                          </button>
+                        </div>
+                      </div>
+
+                      {paymentInvoice === invoice.id && (
+                        <div className="mt-4 rounded-xl border border-border bg-muted/20 p-4">
+                          <div className="grid gap-3 md:grid-cols-[1fr_180px_auto]">
+                            <input
+                              type="number"
+                              min="0.01"
+                              max={Number(
+                                invoice.remaining_amount || 0,
+                              )}
+                              step="0.01"
+                              value={paymentAmount}
+                              onChange={(event) =>
+                                setPaymentAmount(
+                                  event.target.value,
+                                )
+                              }
+                              placeholder="Payment amount"
+                              className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                            />
+
+                            <select
+                              value={paymentMethod}
+                              onChange={(event) =>
+                                setPaymentMethod(
+                                  event.target.value,
+                                )
+                              }
+                              className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                            >
+                              <option value="cash">
+                                Cash
+                              </option>
+                              <option value="upi">
+                                UPI
+                              </option>
+                              <option value="card">
+                                Card
+                              </option>
+                              <option value="bank_transfer">
+                                Bank transfer
+                              </option>
+                              <option value="credit">
+                                Credit
+                              </option>
+                            </select>
+
+                            <button
+                              type="button"
+                              disabled={paymentSaving}
+                              onClick={() =>
+                                submitRetailerPayment(
+                                  invoice.id,
+                                  Number(
+                                    invoice.remaining_amount || 0,
+                                  ),
+                                )
+                              }
+                              className="rounded-lg bg-foreground px-4 py-2 text-sm font-bold text-background disabled:opacity-50"
+                            >
+                              {paymentSaving
+                                ? 'Saving...'
+                                : 'Save payment'}
+                            </button>
+                          </div>
+
+                          {paymentError && (
+                            <p className="mt-3 text-xs font-semibold text-destructive">
+                              {paymentError}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </SectionCard>
+
+        {/* Last payment */}
+        <SectionCard className="mt-7 p-5">
+
+          <p className="mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">
+            Last payment
+          </p>
+
+          {lastPayment ? (
+            <div className="mt-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+
+              <div>
+
+                <p className="text-2xl font-extrabold">
+                  {money(
+                    lastPayment.last_payment_amount,
+                  )}
+                </p>
+
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {lastPayment.last_payment_method
+                    ? lastPayment.last_payment_method
+                        .replaceAll('_', ' ')
+                        .replace(
+                          /\b\w/g,
+                          (char: string) => char.toUpperCase(),
+                        )
+                    : 'Payment'}
+                  {' · '}
+                  {dateLabel(
+                    lastPayment.last_payment_at!,
+                  )}
+                </p>
+
+              </div>
+
+              <Link
+                href={`/invoice/${lastPayment.invoice_id}`}
+                className="text-xs font-bold underline"
+              >
+                {lastPayment.invoice_number}
+              </Link>
+
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-muted-foreground">
+              No payments recorded yet.
+            </p>
+          )}
+
+        </SectionCard>
+
+        {/* Invoice / Ledger history */}
+        <SectionCard className="mt-7 overflow-hidden">
+
+          <div className="border-b border-border px-5 py-5">
+
+            <p className="mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">
+              Transaction history
+            </p>
+
+            <h2 className="mt-1 font-extrabold">
+              Retailer ledger
+            </h2>
+
+            <p className="mt-1 text-xs text-muted-foreground">
+              Invoice and payment history for{' '}
+              {customer.name}.
+            </p>
+
+          </div>
+
+          {ledger.isLoading ? (
+            <Loading label="Loading ledger…" />
+          ) : ledger.isError ? (
+            <ErrorNotice
+              message={errorMessage(
+                ledger.error,
+                'Could not load retailer ledger.',
+              )}
+              onRetry={() => ledger.refetch()}
+            />
+          ) : ledger.data?.length ? (
+            <div className="divide-y divide-border">
+
+              {/* Desktop header */}
+              <div className="hidden grid-cols-[1fr_1fr_1.2fr_1fr_1fr] gap-4 border-b border-border bg-muted/30 px-5 py-3 mono text-[10px] uppercase tracking-wider text-muted-foreground sm:grid">
+                <span>Date</span>
+                <span>Type</span>
+                <span>Reference</span>
+                <span>Amount</span>
+                <span>Balance</span>
+              </div>
+
+              {ledger.data.map((entry, index) => {
+                const isInvoice = entry.type === 'invoice';
+
+                const linkedInvoice =
+                  customerInvoices.find(
+                    (invoice) =>
+                      invoice.invoice_number === entry.reference,
+                  );
+
+                return (
+                  <div
+                    key={`${entry.date}-${entry.reference}-${entry.type}-${index}`}
+                    className="px-5 py-5"
+                  >
+                    <div className="grid gap-4 sm:grid-cols-[1fr_1fr_1.2fr_1fr_1fr] sm:items-center">
+
+                      {/* Date */}
+                      <div>
+                        <p className="text-sm font-medium">
+                          {dateLabel(entry.date)}
+                        </p>
+
+                        <p className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground sm:hidden">
+                          Date
+                        </p>
+                      </div>
+
+                      {/* Type */}
+                      <div>
+                        <p
+                          className={`text-sm font-bold ${
+                            isInvoice
+                              ? 'text-foreground'
+                              : 'text-emerald-600'
+                          }`}
+                        >
+                          {isInvoice ? 'Invoice' : 'Payment'}
+                        </p>
+
+                        <p className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground sm:hidden">
+                          Type
+                        </p>
+                      </div>
+
+                      {/* Reference */}
+                      <div>
+                        {linkedInvoice ? (
+                          <Link
+                            href={`/invoice/${linkedInvoice.invoice_id}`}
+                            className="text-sm font-bold hover:underline"
+                          >
+                            {entry.reference}
+                          </Link>
+                        ) : (
+                          <p className="text-sm font-bold">
+                            {entry.reference}
+                          </p>
+                        )}
+
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {entry.description}
+                        </p>
+
+                        <p className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground sm:hidden">
+                          Reference
+                        </p>
+                      </div>
+
+                      {/* Amount */}
+                      <div>
+                        <p
+                          className={`mono text-sm font-bold ${
+                            isInvoice
+                              ? 'text-destructive'
+                              : 'text-emerald-600'
+                          }`}
+                        >
+                          {isInvoice
+                            ? `+ ${money(entry.debit)}`
+                            : `- ${money(entry.credit)}`}
+                        </p>
+
+                        <p className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground sm:hidden">
+                          Amount
+                        </p>
+                      </div>
+
+                      {/* Balance */}
+                      <div>
+                        <p className="mono text-sm font-bold">
+                          {money(entry.balance)}
+                        </p>
+
+                        <p className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground sm:hidden">
+                          Balance
+                        </p>
+                      </div>
+
+                    </div>
+                  </div>
+                );
+              })}
+
+            </div>
+          ) : (
+            <EmptyState
+              title="No ledger entries yet"
+              body={`${customer.name} does not have any invoices or payments yet.`}
+              action={
+                <Link
+                  href="/upload"
+                  className={buttonPrimary}
+                >
+                  <FilePlus2 size={16} />
+                  Create invoice
+                </Link>
+              }
+            />
+          )}
+
+        </SectionCard>
+
+      </div>
+    </AppShell>
+  );
+}
+
+
+
+
+/* ---------------------------------------------------------------------------
+ * Transactions (invoice history)
+ * ------------------------------------------------------------------------ */
+
+
+export default CustomerDetailPage;

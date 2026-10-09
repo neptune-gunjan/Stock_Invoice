@@ -120,3 +120,19 @@ class CustomerService:
             raise CustomerNotFoundError(customer_id)
 
         return customer
+    def delete_customer(
+        self,
+        customer_id: uuid.UUID,
+        business_id: uuid.UUID,
+    ) -> None:
+        customer = self.get_active(customer_id, business_id)
+        if customer is None:
+            raise CustomerNotFoundError(customer_id)
+        
+        updated = customer.model_copy(
+            update={
+                "deleted_at": utcnow(),
+                "updated_at": utcnow(),
+            }
+        )
+        self._repository.update(updated)
