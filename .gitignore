@@ -14,6 +14,8 @@ ENV/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+htmlcov/
 
 # Environment / secrets
 .env
@@ -27,9 +29,10 @@ ENV/
 backend/uploads/*
 !backend/uploads/.gitkeep
 
-backend/data/*.json
-backend/data/*.tmp
-!backend/data/seed_stock.csv
+# Ignore root-level testing scripts
+scratch/
+test_*.py
+backend/test_*.py
 
 # Logs
 *.log
@@ -51,11 +54,12 @@ yarn-error.log*
 pnpm-debug.log*
 
 # =========================
-# IDE / Editor
+# IDE / Editor / AI
 # =========================
 
 .vscode/
 .idea/
+.claude/
 
 # OS files
 .DS_Store
@@ -69,15 +73,6 @@ desktop.ini
 *.sqlite
 *.sqlite3
 *.db
-
-# =========================
-# Coverage
-# =========================
-
-.coverage
-.coverage.*
-htmlcov/
-.pytest_cache/
 
 # =========================
 # Temporary files

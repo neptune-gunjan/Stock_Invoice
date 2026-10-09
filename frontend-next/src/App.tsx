@@ -98,6 +98,8 @@ import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import UploadPage from './pages/UploadPage';
 import ReviewPage from './pages/ReviewPage';
+import PurchasePage from './pages/PurchasePage';
+import ReportsPage from './pages/ReportsPage';
 import InvoicePage from './pages/InvoicePage';
 import CatalogPage from './pages/CatalogPage';
 import CustomersPage from './pages/CustomersPage';
@@ -105,8 +107,10 @@ import CustomerDetailPage from './pages/CustomerDetailPage';
 import TransactionsPage from './pages/TransactionsPage';
 import BusinessPage from './pages/BusinessPage';
 import NotFound from './pages/NotFound';
+import { PosReceipt } from './pages/PosReceipt';
+import { CustomerStatement } from './pages/CustomerStatement';
 
-function PageHeading({
+export function PageHeading({
   eyebrow,
   title,
   description,
@@ -130,7 +134,7 @@ function PageHeading({
 }
 
 
-function SectionCard({ children, className = '' }: { children: ReactNode; className?: string }) {
+export function SectionCard({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
     <section
       className={`rounded-2xl border border-border bg-card shadow-[0_10px_30px_hsl(164_22%_18%_/.04)] ${className}`}
@@ -155,7 +159,7 @@ function EmptyState({ title, body, action }: { title: string; body: string; acti
 }
 
 
-function ErrorNotice({ message, onRetry }: { message: string; onRetry?: () => void }) {
+export function ErrorNotice({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
     <div className="flex items-start gap-3 rounded-xl border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive">
       <AlertCircle className="mt-0.5 shrink-0" size={18} />
@@ -173,7 +177,7 @@ function ErrorNotice({ message, onRetry }: { message: string; onRetry?: () => vo
 }
 
 
-function Loading({ label = 'Loading…' }: { label?: string }) {
+export function Loading({ label = 'Loading…' }: { label?: string }) {
   return (
     <div className="flex items-center justify-center gap-3 px-6 py-16 text-sm text-muted-foreground">
       <Loader2 className="animate-spin" size={18} /> {label}
@@ -622,9 +626,29 @@ function Routes() {
             <ReviewPage />
           </RequireAuth>
         </Route>
+        <Route path="/purchase">
+          <RequireAuth>
+            <PurchasePage />
+          </RequireAuth>
+        </Route>
+        <Route path="/reports">
+          <RequireAuth>
+            <ReportsPage />
+          </RequireAuth>
+        </Route>
         <Route path="/invoice/:invoiceId">
           <RequireAuth>
             <InvoicePage />
+          </RequireAuth>
+        </Route>
+        <Route path="/receipt/:id">
+          <RequireAuth>
+            <PosReceipt />
+          </RequireAuth>
+        </Route>
+        <Route path="/statement/:id">
+          <RequireAuth>
+            <CustomerStatement />
           </RequireAuth>
         </Route>
         <Route path="/catalog">

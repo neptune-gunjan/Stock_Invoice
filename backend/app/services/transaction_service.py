@@ -18,10 +18,12 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Optional
 
 from app.models.transaction import Transaction, TransactionItem
 from app.repositories.transaction import TransactionRepository
 from app.repositories.stock_movement import StockMovementRepository
+from app.repositories.payment import PaymentRepository
 from app.schemas.stock import StockUpdate
 from app.schemas.transaction import ConfirmRequest
 from app.services.customer_service import CustomerService
@@ -56,12 +58,14 @@ class TransactionService:
         customer_service: CustomerService,
         stock_movement_repository: StockMovementRepository,
         invoice_repository: InvoiceRepository,
+        payment_repository: Optional[PaymentRepository] = None,
     ) -> None:
         self._repository = repository
         self._stock_service = stock_service
         self._customer_service = customer_service
         self._stock_movement_repository = stock_movement_repository
         self._invoice_repository = invoice_repository
+        self._payment_repository = payment_repository
 
     def confirm(
         self,
@@ -91,11 +95,17 @@ class TransactionService:
                     line.qty,
                     stock_item.quantity_available,
                 )
-            resolved.append((stock_item, line.qty))
+
+            # Wholesale rate flexibility: use custom rate if provided, else catalog price
+            unit_price = line.unit_price if line.unit_price is not None else stock_item.unit_price
+            line_discount = line.discount if line.discount is not None else 0.0
+            line_total = max((unit_price * line.qty) - line_discount, 0.0)
+
+            resolved.append((stock_item, line.qty, unit_price, line_total))
 
         subtotal = sum(
-            stock_item.unit_price * qty
-            for stock_item, qty in resolved
+            line_total
+            for _, _, _, line_total in resolved
         )
 
         discount = request.discount
@@ -103,11 +113,17 @@ class TransactionService:
         if discount > subtotal:
             raise ValueError("discount cannot be greater than subtotal")
 
-        taxable_amount = subtotal - discount
+        # Distribute global discount proportionally to calculate exact tax per item
+        tax_amount = 0.0
+        calculated_items = []
+        for stock_item, qty, unit_price, line_total in resolved:
+            item_global_discount_share = discount * (line_total / subtotal) if subtotal > 0 else 0.0
+            taxable = line_total - item_global_discount_share
+            item_tax = taxable * (stock_item.gst_rate / 100)
+            tax_amount += item_tax
+            calculated_items.append((stock_item, qty, unit_price, line_total, stock_item.gst_rate, item_tax))
 
-        tax_amount = taxable_amount * request.tax_rate / 100
-
-        total_amount = taxable_amount + tax_amount
+        total_amount = (subtotal - discount) + tax_amount
 
         transaction = Transaction(
             business_id=business_id,
@@ -125,10 +141,12 @@ class TransactionService:
                 stock_name=stock_item.name,
                 unit=stock_item.unit,
                 qty=qty,
-                unit_price=stock_item.unit_price,
-                line_total=stock_item.unit_price * qty,
+                unit_price=unit_price,
+                gst_rate=gst_rate,
+                tax_amount=item_tax,
+                line_total=line_total,
             )
-            for stock_item, qty in resolved
+            for stock_item, qty, unit_price, line_total, gst_rate, item_tax in calculated_items
         ]
         self._repository.add(transaction, items)
 
@@ -146,7 +164,22 @@ class TransactionService:
 
         self._invoice_repository.add(invoice)
 
-        for stock_item, qty in resolved:
+        # Record upfront counter payment if specified
+        if request.initial_payment_amount and request.initial_payment_amount > 0 and self._payment_repository:
+            from app.models.payment import Payment
+            paid_now = min(request.initial_payment_amount, total_amount)
+            self._payment_repository.add(
+                Payment(
+                    invoice_id=invoice.id,
+                    amount=paid_now,
+                    payment_method=request.initial_payment_method or "cash",
+                )
+            )
+            invoice.payment_status = "paid" if paid_now >= total_amount else "partial"
+            invoice.payment_method = request.initial_payment_method or "cash"
+            self._invoice_repository.update(invoice, business_id)
+
+        for stock_item, qty, _, _ in resolved:
             quantity_before = stock_item.quantity_available
             quantity_after = quantity_before - qty
 

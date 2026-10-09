@@ -582,6 +582,7 @@ function PaymentPanel({
 
 function CustomersPage() {
   const customers = useCustomers();
+  const summary = useDashboard();
 
   const [query, setQuery] = useState('');
   const [customerFilter, setCustomerFilter] = useState<
@@ -1008,6 +1009,18 @@ function CustomersPage() {
           </button>
         }
       />
+
+      {summary.data && summary.data.outstanding_amount > 0 && (
+        <div className="mb-6 rounded-2xl bg-orange-50 border border-orange-200 px-6 py-5 text-orange-950 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+          <div>
+            <p className="text-[10px] uppercase tracking-[.18em] text-orange-900/60 font-bold">Market Credit (Udhaar)</p>
+            <h2 className="text-2xl font-extrabold tracking-tight text-orange-600 mt-1">{money(summary.data.outstanding_amount)}</h2>
+          </div>
+          <p className="text-sm opacity-80 max-w-sm">
+            This is the total outstanding amount that is currently stuck in the market across all your retailers.
+          </p>
+        </div>
+      )}
 
       {/* Search */}
       <div className="mb-6 flex flex-col gap-3 sm:flex-row">

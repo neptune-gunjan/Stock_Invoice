@@ -209,6 +209,9 @@ def get_transaction_service(
     invoice_repository: InvoiceRepository = Depends(
         get_invoice_repository
     ),
+    payment_repository: PaymentRepository = Depends(
+        get_payment_repository
+    ),
 ) -> TransactionService:
 
     return TransactionService(
@@ -217,6 +220,7 @@ def get_transaction_service(
         customer_service,
         stock_movement_repository,
         invoice_repository,
+        payment_repository,
     )
 
 
@@ -302,6 +306,9 @@ def get_dashboard_service(
     payment_repository: PaymentRepository = Depends(
         get_payment_repository
     ),
+    transaction_repository: TransactionRepository = Depends(
+        get_transaction_repository
+    ),
 ) -> DashboardService:
 
     return DashboardService(
@@ -309,6 +316,7 @@ def get_dashboard_service(
         stock_repository,
         customer_repository,
         payment_repository,
+        transaction_repository,
     )
 
 

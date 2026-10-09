@@ -26,7 +26,8 @@ import {
   History,
   PackagePlus,
   Eye,
-  EyeOff
+  EyeOff,
+  Printer
 } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -410,7 +411,7 @@ function Row({ label, value }: { label: string; value: string }) {
  * Catalog (stock CRUD)
  * ------------------------------------------------------------------------ */
 
-const blankForm = { name: '', sku: '', unit: '', unit_price: '', quantity_available: '', low_stock_threshold: '', aliases: '' };
+const blankForm = { name: '', sku: '', hsn_code: '', unit: '', unit_price: '', quantity_available: '', low_stock_threshold: '', gst_rate: '', aliases: '' };
 
 
 function PaymentPanel({
@@ -599,14 +600,45 @@ function CatalogPage() {
   const [form, setForm] = useState(blankForm);
   const [error, setError] = useState('');
 
+  const [showLowStockOnly, setShowLowStockOnly] = useState(false);
+
   const items = stock.data ?? [];
   const shown = useMemo(
     () =>
-      items.filter((item) =>
-        `${item.name} ${(item.aliases ?? []).join(' ')} ${item.sku ?? ''}`.toLowerCase().includes(query.toLowerCase()),
-      ),
-    [items, query],
+      items.filter((item) => {
+        const matchesSearch = `${item.name} ${(item.aliases ?? []).join(' ')} ${item.sku ?? ''}`.toLowerCase().includes(query.toLowerCase());
+        const isLow = Number(item.quantity_available) <= Number(item.low_stock_threshold);
+        return matchesSearch && (!showLowStockOnly || isLow);
+      }),
+    [items, query, showLowStockOnly],
   );
+
+  const inventoryValue = useMemo(() => {
+    return items.reduce((sum, item) => sum + (item.quantity_available * item.unit_price), 0);
+  }, [items]);
+
+  const exportCatalog = () => {
+    if (!items.length) return;
+    const headers = ['ID', 'Name', 'SKU', 'Aliases', 'Unit', 'Price', 'Low Stock Threshold', 'Available'];
+    const rows = items.map(item => [
+      item.id,
+      `"${item.name.replace(/"/g, '""')}"`,
+      `"${item.sku ?? ''}"`,
+      `"${(item.aliases ?? []).join(', ')}"`,
+      item.unit,
+      item.unit_price,
+      item.low_stock_threshold,
+      item.quantity_available
+    ]);
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'catalog_export.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   const begin = (item?: StockItem) => {
     setError('');
@@ -615,10 +647,12 @@ function CatalogPage() {
       setForm({
         name: item.name,
         sku: item.sku ?? '',
+        hsn_code: item.hsn_code ?? '',
         unit: item.unit,
         unit_price: String(item.unit_price),
         quantity_available: String(item.quantity_available),
         low_stock_threshold: String(item.low_stock_threshold ?? 0),
+        gst_rate: String(item.gst_rate ?? 0),
         aliases: (item.aliases ?? []).join(', '),
       });
     } else {
@@ -637,10 +671,12 @@ function CatalogPage() {
     const payload: StockInput = {
       name: form.name.trim(),
       sku: form.sku.trim() || null,
+      hsn_code: form.hsn_code.trim() || null,
       unit: form.unit.trim(),
       unit_price: Number(form.unit_price),
       quantity_available: Number(form.quantity_available),
       low_stock_threshold: Number(form.low_stock_threshold || 0),
+      gst_rate: Number(form.gst_rate) || 0,
       aliases: form.aliases
         .split(',')
         .map((a) => a.trim())
@@ -721,34 +757,52 @@ function CatalogPage() {
 
   return (
     <AppShell>
-      <PageHeading
-        eyebrow="Stock catalog"
-        title="Know what’s on the shelf."
-        description="Your catalog keeps suggestions grounded in the way you actually sell things."
-        action={
-          <div className="flex flex-wrap items-center gap-2">
+      <div className="print:hidden">
+        <PageHeading
+          eyebrow="Stock catalog"
+          title="Know what’s on the shelf."
+          description="Your catalog keeps suggestions grounded in the way you actually sell things."
+          action={
+            <button onClick={() => begin()} className={buttonPrimary} data-testid="button-add-catalog-item">
+              <Plus size={17} /> Add item
+            </button>
+          }
+        />
+        
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => window.print()}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-border bg-card px-3 text-xs font-bold text-foreground transition hover:bg-muted"
+              type="button"
+            >
+              <Printer size={15} /> Print
+            </button>
+            <button
+              onClick={exportCatalog}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-border bg-card px-3 text-xs font-bold text-foreground transition hover:bg-muted"
+              type="button"
+            >
+              <Download size={15} /> Export
+            </button>
             <button
               onClick={() => {
                 const firstItem = items[0];
-
                 setMovementItem(firstItem ?? null);
                 setMovementType('purchase');
                 setMovementQty('');
                 setMovementError('');
               }}
-              className={buttonQuiet}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-border bg-card px-3 text-xs font-bold text-foreground transition hover:bg-muted"
               type="button"
             >
-              <PackagePlus size={17} /> Stock movement
+              <PackagePlus size={15} /> Adjust Stock
             </button>
-          <button onClick={() => begin()} className={buttonPrimary} data-testid="button-add-catalog-item">
-            <Plus size={17} /> Add item
-          </button>
-        </div>
-        }
-      />
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row">
-        <div className="relative flex-1">
+          </div>
+          
+          <div className="h-px bg-border flex-1 hidden sm:block mx-4" />
+          
+          <div className="relative w-full sm:max-w-xs">
           <Search className="absolute left-3 top-3.5 text-muted-foreground" size={17} />
           <input
             className={`${inputClass} pl-10`}
@@ -758,10 +812,30 @@ function CatalogPage() {
             data-testid="input-search-catalog"
           />
         </div>
-        <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 text-xs text-muted-foreground">
-          <Filter size={15} /> {shown.length} of {items.length} items
+        
         </div>
-      </div>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <label className="flex h-11 items-center gap-2 cursor-pointer rounded-xl border border-border bg-card px-4 text-sm font-medium transition hover:bg-muted/50">
+            <input 
+              type="checkbox" 
+              className="rounded border-gray-300 text-primary focus:ring-primary"
+              checked={showLowStockOnly}
+              onChange={(e) => setShowLowStockOnly(e.target.checked)}
+            />
+            Low stock only
+          </label>
+
+          <div className="flex h-11 items-center gap-2 rounded-xl border border-border bg-card px-4 text-xs font-bold text-muted-foreground">
+            <Filter size={15} /> {shown.length} of {items.length} items
+          </div>
+          
+          <div className="flex-1 hidden sm:block" />
+
+          <div className="flex h-11 items-center justify-between gap-4 rounded-xl border border-border bg-primary/5 px-4">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Total Inventory Value</p>
+            <p className="font-mono text-sm font-extrabold text-primary">{money(inventoryValue)}</p>
+          </div>
+        </div>
 
       {error && (
         <div className="mb-5">
@@ -782,7 +856,7 @@ function CatalogPage() {
               <X size={17} />
             </button>
           </div>
-          <form onSubmit={save} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
+          <form onSubmit={save} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-8">
             <label className="text-xs font-bold lg:col-span-2">
               Item name
               <input
@@ -801,6 +875,15 @@ function CatalogPage() {
                 onChange={(e) => setForm({ ...form, sku: e.target.value })}
                 placeholder="RICE-001"
                 data-testid="input-catalog-sku"
+              />
+            </label>
+            <label className="text-xs font-bold">
+              HSN Code
+              <input
+                className={`${inputClass} mt-2`}
+                value={form.hsn_code}
+                onChange={(e) => setForm({ ...form, hsn_code: e.target.value })}
+                placeholder="100630"
               />
             </label>
             <label className="text-xs font-bold">
@@ -823,6 +906,18 @@ function CatalogPage() {
                 value={form.unit_price}
                 onChange={(e) => setForm({ ...form, unit_price: e.target.value })}
                 data-testid="input-catalog-price"
+              />
+            </label>
+            <label className="text-xs font-bold">
+              GST %
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                className={`${inputClass} mt-2`}
+                value={form.gst_rate}
+                onChange={(e) => setForm({ ...form, gst_rate: e.target.value })}
+                placeholder="5"
               />
             </label>
             <label className="text-xs font-bold">
@@ -849,7 +944,7 @@ function CatalogPage() {
                 data-testid="input-catalog-threshold"
               />
             </label>
-            <label className="text-xs font-bold sm:col-span-2 lg:col-span-4">
+            <label className="text-xs font-bold sm:col-span-2 lg:col-span-8">
               Aliases <span className="font-normal text-muted-foreground">(comma separated — help the matcher)</span>
               <input
                 className={`${inputClass} mt-2`}
@@ -859,7 +954,7 @@ function CatalogPage() {
                 data-testid="input-catalog-aliases"
               />
             </label>
-            <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-6">
+            <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-8">
               <button className={buttonPrimary} disabled={create.isPending || update.isPending} data-testid="button-save-catalog-item">
                 <Check size={16} /> Save item
               </button>
@@ -876,11 +971,13 @@ function CatalogPage() {
           <Loading />
         </SectionCard>
       ) : shown.length ? (
-        <SectionCard className="overflow-hidden">
-          <div className="hidden grid-cols-[1.5fr_.6fr_.6fr_.7fr_.8fr_90px] gap-4 border-b border-border bg-muted/45 px-5 py-3 mono text-[10px] uppercase tracking-wider text-muted-foreground sm:grid">
+        <div className="overflow-x-auto pb-4">
+        <SectionCard className="min-w-[900px] overflow-hidden">
+          <div className="grid grid-cols-[2fr_.6fr_.6fr_.6fr_.7fr_.8fr_120px] gap-4 border-b border-border bg-muted/45 px-5 py-3 mono text-[10px] uppercase tracking-wider text-muted-foreground">
             <span>Item</span>
-            <span>SKU</span>
+            <span>SKU/HSN</span>
             <span>Unit</span>
+            <span>GST %</span>
             <span>Price</span>
             <span>On hand</span>
             <span />
@@ -890,18 +987,27 @@ function CatalogPage() {
               const low = Number(item.quantity_available) <= Number(item.low_stock_threshold);
               return (
                 <div
-                  className="grid gap-3 px-5 py-4 sm:grid-cols-[1.5fr_.6fr_.6fr_.7fr_.8fr_90px] sm:items-center sm:gap-4"
+                  className="grid gap-4 px-5 py-4 grid-cols-[2fr_.6fr_.6fr_.6fr_.7fr_.8fr_120px] items-center"
                   key={item.id}
                   data-testid={`row-catalog-${item.id}`}
                 >
-                  <div>
-                    <p className="text-sm font-bold">{item.name}</p>
-                    {(item.aliases ?? []).length > 0 && (
-                      <p className="mt-1 text-xs text-muted-foreground">Also: {item.aliases.join(', ')}</p>
-                    )}
+                  <div className="flex items-center gap-4">
+                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                      <PackagePlus size={18} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold">{item.name}</p>
+                      {(item.aliases ?? []).length > 0 && (
+                        <p className="mt-1 text-[11px] text-muted-foreground">Also: {item.aliases.join(', ')}</p>
+                      )}
+                    </div>
                   </div>
-                  <span className="text-sm text-muted-foreground">{item.sku || '—'}</span>
+                  <div>
+                    <p className="text-sm text-muted-foreground">{item.sku || '—'}</p>
+                    {item.hsn_code && <p className="text-[10px] text-muted-foreground">HSN: {item.hsn_code}</p>}
+                  </div>
                   <span className="text-sm text-muted-foreground">{item.unit}</span>
+                  <span className="text-sm text-muted-foreground">{item.gst_rate ? `${item.gst_rate}%` : '—'}</span>
                   <span className="mono text-sm">{money(item.unit_price)}</span>
                   <span className={`mono text-sm ${low ? 'font-bold text-accent' : ''}`}>
                     {item.quantity_available} <span className="font-sans text-xs text-muted-foreground">{low ? 'low' : ''}</span>
@@ -938,6 +1044,7 @@ function CatalogPage() {
             })}
           </div>
         </SectionCard>
+        </div>
       ) : (
         <SectionCard>
           <EmptyState
@@ -1294,6 +1401,38 @@ function CatalogPage() {
     </div>
   </div>
 )}
+      </div>
+
+      <div className="hidden print:block text-black bg-white" style={{ fontFamily: 'sans-serif' }}>
+        <style>{`
+          @media print {
+            @page { margin: 1cm; size: A4 portrait; }
+            body { margin: 0; background: white; -webkit-print-color-adjust: exact; }
+            .app-shell { display: none !important; }
+          }
+        `}</style>
+        <h1 className="text-3xl font-extrabold mb-2 text-center uppercase tracking-tight">Wholesale Price List</h1>
+        <p className="text-center text-gray-600 mb-8">Generated: {new Date().toLocaleDateString()}</p>
+        
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="border-b-2 border-black text-left">
+              <th className="py-2 pr-4 font-bold">Item Name</th>
+              <th className="py-2 pr-4 font-bold">SKU</th>
+              <th className="py-2 text-right font-bold">Price (₹)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map(item => (
+                <tr key={item.id} className="border-b border-gray-200 hover:bg-gray-50">
+                  <td className="py-2 pr-4 font-semibold">{item.name}</td>
+                  <td className="py-2 pr-4 text-xs font-mono text-gray-600">{item.sku || '—'}</td>
+                  <td className="py-2 text-right font-extrabold">{money(item.unit_price)} <span className="text-gray-500 font-normal text-xs">/{item.unit}</span></td>
+                </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </AppShell>
   );
 }

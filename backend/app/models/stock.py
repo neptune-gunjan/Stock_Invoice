@@ -21,6 +21,7 @@ class StockItem(BaseModel):
 
     name: str
     sku: Optional[str] = None
+    hsn_code: Optional[str] = None
 
     aliases: list[str] = Field(default_factory=list)
 
@@ -29,6 +30,7 @@ class StockItem(BaseModel):
     quantity_available: float
 
     low_stock_threshold: float = 0
+    gst_rate: float = 0
 
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)

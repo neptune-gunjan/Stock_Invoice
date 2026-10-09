@@ -26,7 +26,8 @@ import {
   History,
   PackagePlus,
   Eye,
-  EyeOff
+  EyeOff,
+  Printer
 } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -586,6 +587,7 @@ function CustomerDetailPage() {
   const customers = useCustomers();
   const transactions = useCustomerTransactions(customerId);
   const ledger = useCustomerLedger(customerId);
+  const business = useBusiness();
 
   const customer = customers.data?.find(
     (item) => item.id === customerId,
@@ -865,6 +867,28 @@ function CustomerDetailPage() {
           </div>
 
           <div className="flex flex-wrap gap-2">
+            {remainingAmount > 0 && customer.phone && (
+              <button
+                onClick={() => {
+                  const businessName = business.data?.business_name || 'our shop';
+                  const text = `Hi ${customer.name},\n\nThis is a gentle reminder from ${businessName} regarding your outstanding Khata balance of ₹${money(remainingAmount)}.\n\nPlease clear it at your earliest convenience.\n\nThank you!`;
+                  window.open(`https://wa.me/${customer.phone.replace(/\D/g, '')}?text=${encodeURIComponent(text)}`, '_blank');
+                }}
+                className={buttonQuiet}
+                data-testid="button-whatsapp-reminder"
+              >
+                <MessageCircle size={16} className="text-green-600" />
+                Send Reminder
+              </button>
+            )}
+            <button
+              onClick={() => window.open(`/statement/${customerId}`, '_blank')}
+              className={buttonQuiet}
+              data-testid="button-print-statement"
+            >
+              <Printer size={16} />
+              Print Statement
+            </button>
             <Link
               href="/upload"
               className={buttonPrimary}

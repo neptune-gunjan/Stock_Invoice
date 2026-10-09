@@ -1,16 +1,19 @@
-import { useState, type ReactNode } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
-import { BarChart3, Boxes, FileCheck2, FilePlus2, History, LogOut, Menu, Save, Store, Users, X } from 'lucide-react';
+import { BarChart3, Boxes, FileCheck2, FilePlus2, History, PackagePlus, PieChart, LogOut, Menu, Save, Store, Users, X, Zap } from 'lucide-react';
 import { clearSession } from '@/lib/auth';
 import { useProfile } from '@/lib/data';
 
 const nav = [
-  { href: '/dashboard', label: 'Overview', icon: BarChart3 },
+  { href: '/dashboard', label: 'Overview', shortcut: 'Alt+D', icon: BarChart3 },
+  { href: '/reports', label: 'Reports', icon: PieChart },
   { href: '/business', label: 'Business', icon: Store },
-  { href: '/catalog', label: 'Stock catalog', icon: Boxes },
-  { href: '/upload', label: 'New invoice', icon: FilePlus2 },
-  { href: '/customers', label: 'Customers', icon: Users },
-  { href: '/transactions', label: 'Transactions', icon: History }, 
+  { href: '/catalog', label: 'Stock catalog', shortcut: 'Alt+S', icon: Boxes },
+  { href: '/purchase', label: 'Stock In', icon: PackagePlus },
+  { href: '/upload', label: 'New invoice', shortcut: 'Alt+N', icon: FilePlus2 },
+  { href: '/review', label: 'Quick Bill ⚡', shortcut: 'Alt+Q', icon: Zap, highlight: true },
+  { href: '/customers', label: 'Customers', shortcut: 'Alt+C', icon: Users },
+  { href: '/transactions', label: 'Transactions', icon: History },
 ];
 
 export function Mark({ compact = false }: { compact?: boolean }) {
@@ -36,9 +39,29 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [location, setLocation] = useLocation();
   const [open, setOpen] = useState(false);
   const profile = useProfile();
+  
   const active = (href: string) => location === href || (href !== '/dashboard' && location.startsWith(href));
-  const initials =
-    profile.ownerName
+  
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts if typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      
+      if (e.altKey) {
+        if (e.key.toLowerCase() === 'q') { e.preventDefault(); setLocation('/review'); }
+        if (e.key.toLowerCase() === 'd') { e.preventDefault(); setLocation('/dashboard'); }
+        if (e.key.toLowerCase() === 'c') { e.preventDefault(); setLocation('/customers'); }
+        if (e.key.toLowerCase() === 's') { e.preventDefault(); setLocation('/catalog'); }
+        if (e.key.toLowerCase() === 'n') { e.preventDefault(); setLocation('/upload'); }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [setLocation]);
+  
+  const initials = (profile.ownerName || '')
       .split(' ')
       .map((part) => part[0])
       .join('')
@@ -70,20 +93,29 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
         <div className="mb-3 px-3 mono text-[10px] uppercase tracking-[.18em] text-sidebar-foreground/40">Workspace</div>
         <nav className="space-y-1">
-          {nav.map(({ href, label, icon: Icon }) => (
+          {nav.map(({ href, label, icon: Icon, highlight, shortcut }: any) => (
             <Link
               key={href}
               href={href}
               onClick={() => setOpen(false)}
               data-testid={`link-nav-${label.toLowerCase().replace(' ', '-')}`}
-              className={`flex min-h-12 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition-colors ${
+              className={`flex min-h-12 items-center justify-between rounded-xl px-3 text-sm font-semibold transition-colors ${
                 active(href)
                   ? 'bg-sidebar-accent text-secondary'
-                  : 'text-sidebar-foreground/68 hover:bg-sidebar-accent hover:text-sidebar-foreground'
+                  : highlight
+                    ? 'bg-secondary/10 text-secondary hover:bg-secondary/20'
+                    : 'text-sidebar-foreground/68 hover:bg-sidebar-accent hover:text-sidebar-foreground'
               }`}
             >
-              <Icon size={18} strokeWidth={active(href) ? 2.2 : 1.8} />
-              {label}
+              <div className="flex items-center gap-3">
+                <Icon size={18} strokeWidth={active(href) ? 2.2 : 1.8} />
+                {label}
+              </div>
+              {shortcut && (
+                <kbd className="hidden lg:inline-block font-mono text-[9px] uppercase tracking-wider text-sidebar-foreground/40 bg-sidebar-accent/50 px-1.5 py-0.5 rounded">
+                  {shortcut}
+                </kbd>
+              )}
             </Link>
           ))}
         </nav>

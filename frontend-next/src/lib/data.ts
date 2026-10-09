@@ -23,11 +23,13 @@ export interface StockItem {
   id: string;
   name: string;
   sku: string | null;
+  hsn_code: string | null;
   aliases: string[];
   unit: string;
   unit_price: number;
   quantity_available: number;
   low_stock_threshold: number;
+  gst_rate: number;
   created_at: string;
   updated_at: string;
 }
@@ -35,10 +37,12 @@ export interface StockItem {
 export interface StockInput {
   name: string;
   sku?: string | null;
+  hsn_code?: string | null;
   unit: string;
   unit_price: number;
   quantity_available: number;
   low_stock_threshold?: number;
+  gst_rate?: number;
   aliases?: string[];
 }
 
@@ -83,6 +87,8 @@ export interface ExtractionJob {
 export interface ConfirmItemInput {
   stock_id: string;
   qty: number;
+  unit_price?: number | null;   // custom wholesale rate (null = use catalog price)
+  discount?: number;            // line-level discount amount
   extracted_item_id?: string | null;
 }
 
@@ -90,8 +96,10 @@ export interface ConfirmRequest {
   extraction_job_id?: string | null;
   customer_id?: string | null;
   items: ConfirmItemInput[];
-  discount?: number;
+  discount?: number;            // bill-level overall discount
   tax_rate?: number;
+  initial_payment_amount?: number | null;   // amount received at counter
+  initial_payment_method?: string | null;   // 'cash' | 'upi' | 'card' | 'bank_transfer'
 }
 
 export interface TransactionItem {
@@ -280,6 +288,12 @@ export const endpoints = {
   listStock: () =>
     apiJson<StockItem[]>('/stock'),
 
+  bulkPurchase: (input: { supplier_name?: string; items: { stock_id: string; qty: number; unit_cost?: number }[] }) =>
+    apiJson<{ status: string; items_processed: number }>('/stock/bulk-purchase', {
+      method: 'POST',
+      body: input,
+    }),
+
   listStockMovements: (id: string) =>
     apiJson<StockMovement[]>(`/stock/${id}/movements`),
 
@@ -339,6 +353,12 @@ export const endpoints = {
   matchJob: (jobId: string) =>
     apiJson<ExtractedItem[]>(`/match/${jobId}`, {
       method: 'POST',
+    }),
+
+  matchText: (text: string) =>
+    apiJson<ExtractedItem[]>('/match/text', {
+      method: 'POST',
+      body: { text },
     }),
 
   getJob: (jobId: string) =>

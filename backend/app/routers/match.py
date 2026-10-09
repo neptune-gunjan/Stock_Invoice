@@ -6,6 +6,8 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from pydantic import BaseModel
+
 from app.dependencies import (
     get_current_user,
     get_extraction_service,
@@ -18,6 +20,10 @@ from app.schemas.extraction import ExtractedItemRead
 from app.services.extraction_service import ExtractionService
 from app.services.matching_service import MatchingService
 from app.services.stock_service import StockService
+
+
+class TextMatchRequest(BaseModel):
+    text: str
 
 
 router = APIRouter(
@@ -58,6 +64,37 @@ def match_job(
     )   
 
     # Enrich matched items with stock information
+    stock_items = stock_service.list_stock(
+        business_id=current_user.business_id
+    )
+
+    return enrich_items(
+        matched_items,
+        stock_items,
+    )
+
+
+@router.post(
+    "/text",
+    response_model=list[ExtractedItemRead],
+)
+def match_order_text(
+    payload: TextMatchRequest,
+    matching_service: MatchingService = Depends(get_matching_service),
+    stock_service: StockService = Depends(get_stock_service),
+    current_user: User = Depends(get_current_user),
+) -> list[ExtractedItemRead]:
+    if current_user.business_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User is not associated with a business.",
+        )
+
+    matched_items = matching_service.match_text(
+        payload.text,
+        business_id=current_user.business_id,
+    )
+
     stock_items = stock_service.list_stock(
         business_id=current_user.business_id
     )

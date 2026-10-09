@@ -23,6 +23,8 @@ class TransactionItem(BaseModel):
     unit: str
     qty: float
     unit_price: float
+    gst_rate: float = 0
+    tax_amount: float = 0
     line_total: float
 
 

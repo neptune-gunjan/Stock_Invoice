@@ -160,7 +160,7 @@ class InvoiceService:
             self._repository.add(invoice)
 
         # ---------------------------------------------------------
-        # 6. Payments
+        # 6. Payments & Khata Running Balance
         # ---------------------------------------------------------
         payments = self._payment_repository.list_by_invoice(
             invoice.id
@@ -175,6 +175,24 @@ class InvoiceService:
             invoice.total_amount - paid_amount,
             0,
         )
+
+        # Calculate Previous Khata Balance if customer is present
+        previous_balance = 0.0
+        if customer is not None:
+            prior_txs = self._transaction_service.list_by_customer(
+                customer.id,
+                business_id=business_id,
+            )
+            for prior_tx in prior_txs:
+                if prior_tx.id != transaction.id and prior_tx.created_at <= transaction.created_at:
+                    prior_inv = self._repository.get_by_transaction(prior_tx.id, business_id)
+                    if prior_inv and prior_inv.deleted_at is None:
+                        prior_payments = self._payment_repository.list_by_invoice(prior_inv.id)
+                        prior_paid = sum(p.amount for p in prior_payments)
+                        prior_due = max(prior_inv.total_amount - prior_paid, 0.0)
+                        previous_balance += prior_due
+
+        closing_balance = round(previous_balance + remaining_amount, 2)
 
         # ---------------------------------------------------------
         # 7. Render HTML
@@ -222,11 +240,13 @@ class InvoiceService:
             tax_amount=invoice.tax_amount,
             total_amount=invoice.total_amount,
 
-            # Payment
+            # Payment & Wholesale Khata
             payment_status=invoice.payment_status,
             payment_method=invoice.payment_method,
             paid_amount=paid_amount,
             remaining_amount=remaining_amount,
+            previous_balance=round(previous_balance, 2),
+            closing_balance=closing_balance,
             payments=payments,
         )
 

@@ -11,6 +11,8 @@ from app.repositories.payment import PaymentRepository
 from app.schemas.dashboard import (DashboardSummary, SalesData, RecentInvoiceRead, LowStockProductRead,)
 
 
+from app.repositories.transaction import TransactionRepository
+
 class DashboardService:
 
     def __init__(
@@ -19,11 +21,13 @@ class DashboardService:
         stock_repository: StockRepository,
         customer_repository: CustomerRepository,
         payment_repository: PaymentRepository,
+        transaction_repository: TransactionRepository = None,
     ) -> None:
         self._invoice_repository = invoice_repository
         self._stock_repository = stock_repository
         self._customer_repository = customer_repository
         self._payment_repository = payment_repository
+        self._transaction_repository = transaction_repository
 
     def get_summary(
         self,
@@ -188,3 +192,67 @@ class DashboardService:
             )
             for item in low_stock_items
         ]
+
+    def get_reports(
+        self,
+        business_id: uuid.UUID,
+    ):
+        from app.schemas.dashboard import ReportsSummary, TopProduct, TopCustomer
+        from app.repositories.transaction import TransactionRepository
+
+        invoices = self._invoice_repository.list_all(business_id)
+        
+        gross_sales = sum(float(i.subtotal or 0.0) for i in invoices)
+        discounts_given = sum(float(i.discount or 0.0) for i in invoices)
+        gst_collected = sum(float(i.tax_amount or 0.0) for i in invoices)
+        
+        # Payment calculation
+        total_payments_received = 0.0
+        for invoice in invoices:
+            payments = self._payment_repository.list_by_invoice(invoice.id)
+            total_payments_received += sum(float(p.amount or 0.0) for p in payments)
+            
+        net_sales = gross_sales - discounts_given
+        total_outstanding = max((net_sales + gst_collected) - total_payments_received, 0)
+
+        transaction_repo = self._transaction_repository
+        
+        product_stats = defaultdict(lambda: {"qty": 0.0, "rev": 0.0, "name": ""})
+        customer_stats = defaultdict(float)
+
+        for inv in invoices:
+            transaction = transaction_repo.get(business_id, inv.transaction_id)
+            if transaction:
+                items = transaction_repo.list_items(business_id, transaction.id)
+                for item in items:
+                    product_stats[item.stock_id]["qty"] += float(item.qty)
+                    product_stats[item.stock_id]["rev"] += float(item.line_total)
+                    product_stats[item.stock_id]["name"] = item.stock_name
+            
+            if inv.customer_id:
+                customer = self._customer_repository.get(inv.customer_id)
+                if customer:
+                    customer_stats[customer.name] += float(inv.total_amount)
+            else:
+                customer_stats["Walk-in"] += float(inv.total_amount)
+
+        top_products = [
+            TopProduct(name=stats["name"], qty_sold=stats["qty"], revenue=stats["rev"])
+            for stats in sorted(product_stats.values(), key=lambda x: x["rev"], reverse=True)[:5]
+        ]
+        
+        top_customers = [
+            TopCustomer(name=name, revenue=rev)
+            for name, rev in sorted(customer_stats.items(), key=lambda x: x[1], reverse=True)[:5]
+        ]
+
+        return ReportsSummary(
+            gross_sales=gross_sales,
+            discounts_given=discounts_given,
+            net_sales=net_sales,
+            gst_collected=gst_collected,
+            total_payments_received=total_payments_received,
+            total_outstanding=total_outstanding,
+            top_products=top_products,
+            top_customers=top_customers
+        )

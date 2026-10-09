@@ -26,7 +26,8 @@ import {
   History,
   PackagePlus,
   Eye,
-  EyeOff
+  EyeOff,
+  Printer
 } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -714,6 +715,15 @@ function InvoicePage() {
             </button>
 
             <button
+              onClick={() => window.open(`/receipt/${invoiceId}`, '_blank')}
+              className={buttonQuiet}
+              data-testid="button-print-pos"
+            >
+              <Printer size={16} />
+              POS Receipt
+            </button>
+
+            <button
               onClick={download}
               disabled={downloading}
               className={buttonPrimary}
@@ -788,7 +798,7 @@ function InvoicePage() {
             <div className="space-y-1 border-t border-border bg-muted/35 px-5 py-5 text-sm">
               <Row label="Subtotal" value={money(data.subtotal)} />
               {data.discount > 0 && <Row label="Discount" value={`- ${money(data.discount)}`} />}
-              {data.tax_amount > 0 && <Row label={`Tax (${data.tax_rate}%)`} value={money(data.tax_amount)} />}
+              {data.tax_amount > 0 && <Row label="GST (Tax)" value={money(data.tax_amount)} />}
               <div className="flex items-center justify-between pt-2">
                 <span className="font-bold">Grand total</span>
                 <span className="mono text-2xl">{money(data.total_amount)}</span>

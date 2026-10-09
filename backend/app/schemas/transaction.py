@@ -15,7 +15,9 @@ class ConfirmItemInput(BaseModel):
     missed) are supported, per docs/phase4-review.md."""
 
     stock_id: uuid.UUID
-    qty: float = Field(gt=0)
+    qty: float = Field(description="Negative for returns, positive for sales")
+    unit_price: Optional[float] = Field(default=None, ge=0)
+    discount: float = Field(default=0, ge=0)
     extracted_item_id: Optional[uuid.UUID] = None
 
 
@@ -29,6 +31,10 @@ class ConfirmRequest(BaseModel):
     discount: float = Field(default=0, ge=0)
 
     tax_rate: float = Field(default=0, ge=0)
+
+    initial_payment_amount: Optional[float] = Field(default=None, ge=0)
+
+    initial_payment_method: Optional[str] = Field(default="cash")
 
 
 class TransactionItemRead(BaseModel):

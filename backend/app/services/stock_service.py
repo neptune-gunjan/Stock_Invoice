@@ -12,7 +12,7 @@ from openpyxl import load_workbook
 
 from app.models.stock import StockItem, utcnow
 from app.repositories.stock import StockRepository
-from app.schemas.stock import StockCreate, StockUpdate
+from app.schemas.stock import StockCreate, StockUpdate, BulkPurchaseRequest
 from app.schemas.stock_import import (
     StockImportError,
     StockImportResult,
@@ -110,10 +110,12 @@ class StockService:
             business_id=business_id,
             name=data.name,
             sku=data.sku,
+            hsn_code=data.hsn_code,
             unit=data.unit,
             unit_price=data.unit_price,
             quantity_available=data.quantity_available,
             low_stock_threshold=data.low_stock_threshold,
+            gst_rate=data.gst_rate,
             aliases=_clean_aliases(data.aliases),
             created_at=utcnow(),
             updated_at=utcnow(),
@@ -482,13 +484,25 @@ class StockService:
                     if alias.strip()
                 ]
 
+                hsn_code = (row.get("hsn_code") or "").strip() or None
+                
+                try:
+                    gst_rate = float((row.get("gst_rate") or "0").strip())
+                except ValueError:
+                    raise ValueError("gst_rate must be a number")
+
+                if gst_rate < 0:
+                    raise ValueError("gst_rate cannot be negative")
+
                 stock_data = StockCreate(
                     name=name,
                     sku=sku,
+                    hsn_code=hsn_code,
                     unit=unit,
                     unit_price=unit_price,
                     quantity_available=quantity_available,
                     low_stock_threshold=low_stock_threshold,
+                    gst_rate=gst_rate,
                     aliases=aliases,
                 )
 
@@ -767,13 +781,27 @@ class StockService:
                             if alias.strip()
                         ]
 
+                    hsn_value = row.get("hsn_code")
+                    hsn_code = str(hsn_value).strip() if hsn_value is not None else None
+
+                    gst_value = row.get("gst_rate")
+                    try:
+                        gst_rate = float(gst_value if gst_value not in (None, "") else 0)
+                    except (TypeError, ValueError):
+                        raise ValueError("gst_rate must be a number")
+                    
+                    if gst_rate < 0:
+                        raise ValueError("gst_rate cannot be negative")
+
                     stock_data = StockCreate(
                         name=name,
                         sku=sku,
+                        hsn_code=hsn_code,
                         unit=unit,
                         unit_price=unit_price,
                         quantity_available=quantity_available,
                         low_stock_threshold=low_stock_threshold,
+                        gst_rate=gst_rate,
                         aliases=aliases,
                     )
 
@@ -875,3 +903,40 @@ class StockService:
         return self._stock_movement_repository.list_by_stock(
             item_id
         )
+
+    def process_bulk_purchase(
+        self,
+        business_id: uuid.UUID,
+        request: BulkPurchaseRequest,
+    ) -> dict:
+        results = []
+        for item in request.items:
+            stock = self._repository.get(item.stock_id)
+            if not stock or stock.business_id != business_id:
+                continue
+
+            quantity_before = stock.quantity_available
+            quantity_after = quantity_before + item.qty
+            
+            updated = stock.model_copy(
+                update={
+                    "quantity_available": quantity_after,
+                    "updated_at": utcnow(),
+                }
+            )
+            self._repository.update(updated)
+            
+            self._stock_movement_repository.add(
+                StockMovement(
+                    stock_id=stock.id,
+                    movement_type="purchase",
+                    quantity=item.qty,
+                    quantity_before=quantity_before,
+                    quantity_after=quantity_after,
+                    reference_id=None,
+                )
+            )
+            
+            results.append({"stock_id": str(stock.id), "qty_added": item.qty})
+            
+        return {"status": "success", "processed": len(results)}
