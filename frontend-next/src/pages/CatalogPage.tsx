@@ -33,7 +33,9 @@ import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { AppShell, Mark } from '@/components/AppShell';
+import { BulkAddGrid } from '@/components/BulkAddGrid';
 import { ApiError, apiJson } from '@/lib/api';
+import { useConfirm } from '@/hooks/useConfirm';
 import { clearSession, hasSession, sendPasswordReset, signIn, signUp } from '@/lib/auth';
 import {
   endpoints,
@@ -584,8 +586,10 @@ function PaymentPanel({
 function CatalogPage() {
   const stock = useStock();
   const { create, update, remove, movement } = useStockMutations();
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const [historyItem, setHistoryItem] = useState<StockItem | null>(null);
+  const [bulkMode, setBulkMode] = useState(false);
 
   const movements = useStockMovements(historyItem?.id ?? null);
   const [movementItem, setMovementItem] = useState<StockItem | null>(null);
@@ -640,6 +644,11 @@ function CatalogPage() {
     URL.revokeObjectURL(url);
   };
 
+  const generateSku = (name: string) => {
+    const prefix = name.replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase();
+    return `${prefix}-${Math.floor(1000 + Math.random() * 9000)}`;
+  };
+
   const begin = (item?: StockItem) => {
     setError('');
     if (item) {
@@ -670,7 +679,7 @@ function CatalogPage() {
 
     const payload: StockInput = {
       name: form.name.trim(),
-      sku: form.sku.trim() || null,
+      sku: form.sku.trim() || generateSku(form.name.trim()),
       hsn_code: form.hsn_code.trim() || null,
       unit: form.unit.trim(),
       unit_price: Number(form.unit_price),
@@ -693,8 +702,36 @@ function CatalogPage() {
     }
   };
 
+  const handleBulkSave = async (items: any[]) => {
+    setError('');
+    try {
+      await Promise.all(items.map(item => 
+        create.mutateAsync({
+          name: item.name,
+          sku: item.sku || generateSku(item.name),
+          unit: item.unit,
+          unit_price: Number(item.unit_price),
+          gst_rate: Number(item.gst_rate) || 0,
+          quantity_available: 0,
+          low_stock_threshold: 0,
+          hsn_code: null,
+          aliases: []
+        })
+      ));
+      setBulkMode(false);
+    } catch (e) {
+      setError(errorMessage(e, 'Could not save bulk items.'));
+    }
+  };
+
   const del = async (item: StockItem) => {
-    if (!window.confirm(`Remove "${item.name}" from the catalog?`)) return;
+    const ok = await confirm({
+      title: `Remove "${item.name}"?`,
+      description: 'This will permanently delete the product from your catalog.',
+      confirmLabel: 'Remove',
+      confirmClassName: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+    });
+    if (!ok) return;
     try {
       await remove.mutateAsync(item.id);
     } catch (e) {
@@ -757,17 +794,31 @@ function CatalogPage() {
 
   return (
     <AppShell>
+      <ConfirmDialog />
       <div className="print:hidden">
         <PageHeading
-          eyebrow="Stock catalog"
-          title="Know what’s on the shelf."
-          description="Your catalog keeps suggestions grounded in the way you actually sell things."
+          eyebrow="Products"
+          title="Manage your products."
+          description="Keep track of your stock and pricing."
           action={
-            <button onClick={() => begin()} className={buttonPrimary} data-testid="button-add-catalog-item">
-              <Plus size={17} /> Add item
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setBulkMode(true)} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-4 text-sm font-semibold text-primary transition hover:bg-primary/10">
+                ⚡ Quick Bulk Add
+              </button>
+              <button onClick={() => begin()} className={buttonPrimary} data-testid="button-add-catalog-item">
+                <Plus size={17} /> Add item
+              </button>
+            </div>
           }
         />
+
+        {bulkMode && (
+          <BulkAddGrid 
+            onClose={() => setBulkMode(false)} 
+            onSave={handleBulkSave} 
+            isSaving={create.isPending} 
+          />
+        )}
         
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="flex items-center gap-2 flex-wrap">
@@ -1048,8 +1099,8 @@ function CatalogPage() {
       ) : (
         <SectionCard>
           <EmptyState
-            title={query ? 'No matching stock' : 'Your catalog is empty'}
-            body={query ? 'Try a different search.' : 'Add your products so extraction has something to match against.'}
+            title={query ? 'No matching products' : 'Your product list is empty'}
+            body={query ? 'Try a different search.' : 'You have no products yet. Click below to add your first product!'}
             action={
               <button onClick={() => begin()} className={buttonPrimary}>
                 <Plus size={16} /> Add item

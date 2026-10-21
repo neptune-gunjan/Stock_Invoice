@@ -50,3 +50,11 @@ class BusinessRepository(ABC):
     ) -> bool:
         """Soft-delete an active business."""
         ...
+
+    @abstractmethod
+    def increment_invoice_counter(
+        self,
+        business_id: uuid.UUID,
+    ) -> int:
+        """Increment and return the invoice counter for a business."""
+        ...

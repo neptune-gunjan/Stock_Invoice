@@ -207,6 +207,21 @@ class StockService:
 
         return self._repository.update(updated)
 
+    def decrement_stock(
+        self,
+        item_id: uuid.UUID,
+        amount: float,
+        business_id: uuid.UUID,
+    ) -> bool:
+        existing = self._repository.get(item_id)
+        if existing is None or not existing.is_active or existing.business_id != business_id:
+            raise StockNotFoundError(item_id)
+            
+        if amount < 0:
+            raise ValueError("decrement amount cannot be negative")
+            
+        return self._repository.decrement_quantity(item_id, amount)
+
     def delete_stock(
         self,
         item_id: uuid.UUID,

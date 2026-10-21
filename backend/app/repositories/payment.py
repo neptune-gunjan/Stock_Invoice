@@ -29,3 +29,11 @@ class PaymentRepository(ABC):
         invoice_ids: list[uuid.UUID],
     ) -> list[Payment]:
         ...
+
+    @abstractmethod
+    def create_payment_atomic(
+        self, 
+        payment: Payment, 
+        business_id: uuid.UUID
+    ) -> Payment:
+        ...

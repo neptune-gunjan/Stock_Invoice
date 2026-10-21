@@ -38,33 +38,6 @@ class PaymentService:
         business_id: uuid.UUID,
     ) -> Payment:
 
-        invoice = self._invoice_repository.get(invoice_id, business_id)
-
-        if invoice is None or invoice.deleted_at is not None:
-            raise InvoiceNotFoundError(invoice_id)
-
-        if invoice.status == "cancelled":
-            raise InvalidPaymentError(
-                "Cannot make payment for a cancelled invoice"
-            )
-
-        existing_payments = (
-            self._payment_repository.list_by_invoice(invoice_id)
-        )
-
-        paid_amount = sum(
-            payment.amount
-            for payment in existing_payments
-        )
-
-        remaining_amount = invoice.total_amount - paid_amount
-
-        if request.amount > remaining_amount:
-            raise InvalidPaymentError(
-                f"Payment exceeds remaining amount. "
-                f"Remaining amount: {remaining_amount:.2f}"
-            )
-
         payment = Payment(
             invoice_id=invoice_id,
             amount=request.amount,
@@ -72,37 +45,13 @@ class PaymentService:
             reference_number=request.reference_number,
         )
 
-        self._payment_repository.add(payment)
-
-        # Include the newly created payment
-        all_payments = existing_payments + [payment]
-
-        new_paid_amount = paid_amount + request.amount
-
-        # Update payment status
-        if new_paid_amount >= invoice.total_amount:
-            invoice.payment_status = "paid"
-        elif new_paid_amount > 0:
-            invoice.payment_status = "partial"
-        else:
-            invoice.payment_status = "pending"
-
-        # Update payment method
-        payment_methods = {
-            p.payment_method
-            for p in all_payments
-        }
-
-        if len(payment_methods) == 1:
-            invoice.payment_method = next(iter(payment_methods))
-        else:
-            invoice.payment_method = "multiple"
-
-        invoice.updated_at = datetime.now(timezone.utc)
-        
-        self._invoice_repository.update(invoice, business_id)
-
-        return payment
+        try:
+            return self._payment_repository.create_payment_atomic(payment, business_id)
+        except ValueError as exc:
+            msg = str(exc)
+            if "Invoice not found" in msg:
+                raise InvoiceNotFoundError(invoice_id)
+            raise InvalidPaymentError(msg)
 
     def get(
         self,

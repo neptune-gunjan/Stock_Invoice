@@ -51,3 +51,11 @@ class InvoiceRepository(ABC):
         business_id: uuid.UUID,
     ) -> Invoice:
         ...
+
+    @abstractmethod
+    def lock_and_get(
+        self,
+        invoice_id: uuid.UUID,
+        business_id: uuid.UUID,
+    ) -> Optional[Invoice]:
+        ...

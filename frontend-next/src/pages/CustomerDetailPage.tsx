@@ -612,6 +612,7 @@ function CustomerDetailPage() {
 
   const [paymentInvoice, setPaymentInvoice] =
     useState<string | null>(null);
+  const [showBulkPayment, setShowBulkPayment] = useState(false);
 
   const [paymentAmount, setPaymentAmount] = useState('');
 
@@ -747,6 +748,52 @@ function CustomerDetailPage() {
     };
   };
 
+
+  const submitBulkPayment = async () => {
+    const totalToPay = Number(paymentAmount);
+    if (!Number.isFinite(totalToPay) || totalToPay <= 0) {
+      setPaymentError('Enter a valid amount.');
+      return;
+    }
+    if (totalToPay > remainingAmount) {
+      setPaymentError('Payment cannot exceed total outstanding.');
+      return;
+    }
+
+    setPaymentSaving(true);
+    setPaymentError('');
+
+    try {
+      let amountLeft = totalToPay;
+      const sortedInvoices = [...dueInvoices].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      
+      for (const invoice of sortedInvoices) {
+        if (amountLeft <= 0) break;
+        const rem = Number(invoice.remaining_amount || 0);
+        if (rem <= 0) continue;
+        
+        const payForThis = Math.min(amountLeft, rem);
+        await endpoints.addPayment(invoice.id, {
+          amount: payForThis,
+          payment_method: paymentMethod,
+        });
+        amountLeft -= payForThis;
+      }
+
+      setPaymentAmount('');
+      setShowBulkPayment(false);
+
+      await Promise.all([
+        transactions.refetch(),
+        ledger.refetch(),
+      ]);
+    } catch (e) {
+      setPaymentError(errorMessage(e, 'Could not record bulk payment.'));
+    } finally {
+      setPaymentSaving(false);
+    }
+  };
+
   const submitRetailerPayment = async (
     invoiceId: string,
     remaining: number,
@@ -837,65 +884,59 @@ function CustomerDetailPage() {
         </Link>
 
         {/* Header */}
-        <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-4">
-
-            <div className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-primary text-xl font-extrabold text-primary-foreground">
-              {customer.name
-                ?.trim()
-                ?.charAt(0)
-                ?.toUpperCase() || '?'}
+        <div className="mb-8 flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
+            <div className="grid h-20 w-20 shrink-0 place-items-center rounded-3xl bg-gradient-to-br from-primary to-blue-600 text-3xl font-extrabold text-white shadow-xl shadow-primary/20">
+              {customer.name?.trim()?.charAt(0)?.toUpperCase() || '?'}
             </div>
-
             <div className="min-w-0">
-
-              <p className="mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">
-                Retailer
-              </p>
-
-              <h1 className="mt-1 truncate text-3xl font-extrabold tracking-[-.04em]">
-                {customer.name}
-              </h1>
-
-              <p className="mt-1 text-sm text-muted-foreground">
-                {customer.business_name ||
-                  customer.phone ||
-                  'Retailer profile'}
-              </p>
-
+              <p className="mono text-[10px] font-bold uppercase tracking-[.18em] text-muted-foreground">Retailer Ledger</p>
+              <h1 className="mt-1 truncate text-3xl font-extrabold tracking-[-.04em] sm:text-4xl text-foreground">{customer.name}</h1>
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {remainingAmount > 0 && customer.phone && (
-              <button
-                onClick={() => {
-                  const businessName = business.data?.business_name || 'our shop';
-                  const text = `Hi ${customer.name},\n\nThis is a gentle reminder from ${businessName} regarding your outstanding Khata balance of ₹${money(remainingAmount)}.\n\nPlease clear it at your earliest convenience.\n\nThank you!`;
-                  window.open(`https://wa.me/${customer.phone.replace(/\D/g, '')}?text=${encodeURIComponent(text)}`, '_blank');
-                }}
-                className={buttonQuiet}
-                data-testid="button-whatsapp-reminder"
-              >
-                <MessageCircle size={16} className="text-green-600" />
-                Send Reminder
+          <div className="flex flex-col items-start lg:items-end gap-4 rounded-3xl bg-card border border-border p-5 shadow-sm min-w-[300px]">
+            <div className="flex items-end gap-3 w-full justify-between lg:justify-end">
+              <div>
+                <p className="mono text-[10px] uppercase tracking-wider text-muted-foreground">Total Amount Due</p>
+                <p className={`mt-1 font-mono text-3xl font-extrabold ${remainingAmount > 0 ? 'text-destructive' : 'text-emerald-600'}`}>{money(remainingAmount)}</p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 w-full lg:justify-end mt-1">
+              {remainingAmount > 0 && (
+                <button
+                  onClick={() => {
+                    setPaymentAmount(String(remainingAmount));
+                    setPaymentMethod('cash');
+                    setPaymentError('');
+                    setShowBulkPayment(true);
+                  }}
+                  className={`${buttonPrimary} bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto shadow-lg shadow-emerald-600/20`}
+                >
+                  <Check size={16} /> Receive Payment
+                </button>
+              )}
+              {remainingAmount > 0 && customer.phone && (
+                <button
+                  onClick={() => {
+                    const businessName = business.data?.business_name || 'our shop';
+                    const text = `Hi ${customer.name},\n\nThis is a gentle reminder from ${businessName} regarding your outstanding Khata balance of ₹${remainingAmount}.\n\nPlease clear it at your earliest convenience.\n\nThank you!`;
+                    window.open(`https://wa.me/${(customer.phone || '').replace(/\D/g, '')}?text=${encodeURIComponent(text)}`, '_blank');
+                  }}
+                  className={buttonQuiet}
+                  title="Send WhatsApp Reminder"
+                >
+                  <MessageCircle size={16} className="text-green-600" />
+                </button>
+              )}
+              <button onClick={() => window.open(`/statement/${customerId}`, '_blank')} className={buttonQuiet} title="Print Statement">
+                <Printer size={16} />
               </button>
-            )}
-            <button
-              onClick={() => window.open(`/statement/${customerId}`, '_blank')}
-              className={buttonQuiet}
-              data-testid="button-print-statement"
-            >
-              <Printer size={16} />
-              Print Statement
-            </button>
-            <Link
-              href="/upload"
-              className={buttonPrimary}
-            >
-              <FilePlus2 size={16} />
-              New invoice
-            </Link>
+              <Link href="/upload" className={buttonQuiet} title="New Invoice">
+                <FilePlus2 size={16} />
+              </Link>
+            </div>
           </div>
         </div>
 

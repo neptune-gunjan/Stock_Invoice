@@ -27,6 +27,10 @@ class BusinessCreate(BaseModel):
 
     logo_path: Optional[str] = None
 
+    bank_name: Optional[str] = Field(default=None, max_length=100)
+    bank_account_number: Optional[str] = Field(default=None, max_length=50)
+    bank_ifsc: Optional[str] = Field(default=None, max_length=20)
+
 
 class BusinessUpdate(BaseModel):
     business_name: Optional[str] = Field(
@@ -69,6 +73,10 @@ class BusinessUpdate(BaseModel):
     )
 
     logo_path: Optional[str] = None
+    
+    bank_name: Optional[str] = Field(default=None, max_length=100)
+    bank_account_number: Optional[str] = Field(default=None, max_length=50)
+    bank_ifsc: Optional[str] = Field(default=None, max_length=20)
 
 
 class BusinessResponse(BaseModel):
@@ -87,6 +95,10 @@ class BusinessResponse(BaseModel):
 
     invoice_prefix: str
     logo_path: Optional[str] = None
+    
+    bank_name: Optional[str] = None
+    bank_account_number: Optional[str] = None
+    bank_ifsc: Optional[str] = None
 
     is_active: bool = True
 

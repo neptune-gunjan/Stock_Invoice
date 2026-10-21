@@ -97,6 +97,13 @@ async def import_stock(
             detail="Uploaded file is empty.",
         )
 
+    MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB limit
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File size exceeds the 5MB limit.",
+        )
+
     try:
         if filename.endswith(".xlsx"):
             return service.import_xlsx(
@@ -192,6 +199,24 @@ def create_stock_movement(
         ) from exc
 
 
+@router.get(
+    "/{item_id}",
+    response_model=StockRead,
+)
+def get_stock(
+    item_id: uuid.UUID,
+    service: StockService = Depends(get_stock_service),
+    current_user: User = Depends(get_current_user),
+) -> StockRead:
+    try:
+        return service.get_stock(item_id, business_id=current_user.business_id)
+    except StockNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+
 @router.patch(
     "/{item_id}",
     response_model=StockRead,
@@ -199,7 +224,6 @@ def create_stock_movement(
 def update_stock(
     item_id: uuid.UUID,
     payload: StockUpdate,
-    BulkPurchaseRequest,
     service: StockService = Depends(get_stock_service),
     current_user: User = Depends(get_current_user),
 ) -> StockRead:

@@ -209,6 +209,9 @@ class InvoiceService:
             business_email=business.email,
             business_address=business.address,
             gst_number=business.gst_number,
+            bank_name=business.bank_name,
+            bank_account_number=business.bank_account_number,
+            bank_ifsc=business.bank_ifsc,
             logo_path=business.logo_path,
             invoice_prefix=business.invoice_prefix,
 
@@ -216,6 +219,11 @@ class InvoiceService:
             invoice_number=invoice.invoice_number,
             invoice_date=transaction.created_at.strftime(
                 "%Y-%m-%d"
+            ),
+            due_date=(
+                invoice.due_date.strftime("%Y-%m-%d")
+                if invoice.due_date
+                else None
             ),
 
             # Customer
@@ -226,6 +234,11 @@ class InvoiceService:
             ),
             customer_phone=(
                 customer.phone
+                if customer
+                else None
+            ),
+            customer_gst_number=(
+                customer.gst_number
                 if customer
                 else None
             ),
@@ -542,10 +555,6 @@ class InvoiceService:
         business_id: uuid.UUID,
     ) -> str:
 
-        invoices = self._repository.list_all(
-            business_id
-        )
-
         business = self._business_repository.get(
             business_id
         )
@@ -562,25 +571,7 @@ class InvoiceService:
             f"-{current_year}-"
         )
 
-        numbers = []
-
-        for invoice in invoices:
-            if invoice.invoice_number.startswith(prefix):
-                try:
-                    numbers.append(
-                        int(
-                            invoice.invoice_number[
-                                len(prefix):
-                            ]
-                        )
-                    )
-                except ValueError:
-                    continue
-
-        next_number = max(
-            numbers,
-            default=0,
-        ) + 1
+        next_number = self._business_repository.increment_invoice_counter(business_id)
 
         return (
             f"{prefix}"

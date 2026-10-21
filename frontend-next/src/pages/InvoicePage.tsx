@@ -34,6 +34,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { AppShell, Mark } from '@/components/AppShell';
 import { ApiError, apiJson } from '@/lib/api';
+import { useConfirm } from '@/hooks/useConfirm';
 import { clearSession, hasSession, sendPasswordReset, signIn, signUp } from '@/lib/auth';
 import {
   endpoints,
@@ -585,17 +586,22 @@ function InvoicePage() {
   const { invoiceId } = useParams<{ invoiceId: string }>();
   const invoice = useInvoice(invoiceId);
   const customers = useCustomers();
+  const business = useBusiness();
   const [pdfError, setPdfError] = useState('');
   const [downloading, setDownloading] = useState(false);
   const { cancel } = useInvoiceMutations();
   const [cancelError, setCancelError] = useState('');
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const handleCancel = async () => {
     if (!invoiceId || !invoice.data) return;
 
-    const confirmed = window.confirm(
-      `Cancel invoice ${invoice.data.invoice_number}?`
-    );
+    const confirmed = await confirm({
+      title: `Cancel Invoice ${invoice.data.invoice_number}?`,
+      description: 'This will void the invoice and reverse any stock deductions. This action cannot be undone.',
+      confirmLabel: 'Cancel Invoice',
+      confirmClassName: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+    });
 
     if (!confirmed) return;
 
@@ -612,10 +618,12 @@ function InvoicePage() {
   const [whatsappError, setWhatsappError] = useState('');
   const [whatsappResult, setWhatsappResult] = useState<WhatsAppSendResult | null>(null);
 
-  const customerName = useMemo(() => {
+  const customer = useMemo(() => {
     if (!invoice.data?.customer_id) return null;
-    return customers.data?.find((c) => c.id === invoice.data?.customer_id)?.name ?? 'Customer on file';
+    return customers.data?.find((c) => c.id === invoice.data?.customer_id) ?? null;
   }, [invoice.data, customers.data]);
+
+  const customerName = customer?.name ?? (invoice.data as any)?.customer_name ?? null;
 
   const download = async () => {
     if (!invoiceId || !invoice.data) return;
@@ -679,6 +687,7 @@ function InvoicePage() {
 
   return (
     <AppShell>
+      <ConfirmDialog />
       <div className="mx-auto max-w-4xl">
         <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <Link
@@ -765,16 +774,30 @@ function InvoicePage() {
           <SectionCard className="overflow-hidden">
             <div className="flex flex-col gap-5 border-b border-border bg-primary p-7 text-primary-foreground sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <div className="mb-6">
+                <div className="mb-4">
                   <Mark compact />
                 </div>
-                <p className="text-xl font-extrabold">Invoice</p>
-                <p className="mt-1 mono text-xs text-primary-foreground/60">{data.invoice_number}</p>
+                <p className="text-xl font-extrabold">{business.data?.business_name || 'TAX INVOICE'}</p>
+                {business.data?.address && <p className="text-xs text-primary-foreground/80 mt-1 max-w-xs">{business.data.address}</p>}
+                {business.data?.phone && <p className="text-xs text-primary-foreground/80 mt-0.5">Ph: {business.data.phone}</p>}
+                {business.data?.gst_number && <p className="text-xs font-mono text-primary-foreground/80 mt-0.5">GSTIN: {business.data.gst_number}</p>}
+                <p className="mt-3 mono text-xs text-primary-foreground/70 font-semibold">Inv #{data.invoice_number}</p>
               </div>
               <div className="sm:text-right">
-                <p className="mono text-[10px] uppercase tracking-[.16em] text-primary-foreground/50">Issued</p>
-                <p className="mt-2 text-sm font-bold">{dateLabel(data.created_at)}</p>
-                <p className="mt-5 text-sm text-primary-foreground/70">{customerName || 'Walk-in customer'}</p>
+                <p className="mono text-[10px] uppercase tracking-[.16em] text-primary-foreground/50">Issued Date</p>
+                <p className="mt-1 text-sm font-bold">{dateLabel(data.created_at)}</p>
+                {data.due_date && (
+                  <div className="mt-2">
+                    <p className="mono text-[10px] uppercase tracking-[.16em] text-primary-foreground/50">Payment Due</p>
+                    <p className="text-xs font-bold text-amber-200">{dateLabel(data.due_date)}</p>
+                  </div>
+                )}
+                <div className="mt-4 pt-2 border-t border-primary-foreground/20">
+                  <p className="mono text-[10px] uppercase tracking-[.16em] text-primary-foreground/50">Bill To</p>
+                  <p className="mt-0.5 text-sm font-bold">{customer?.name || (data as any).customer_name || 'Walk-in customer'}</p>
+                  {customer?.phone && <p className="text-xs text-primary-foreground/75">Ph: {customer.phone}</p>}
+                  {customer?.gst_number && <p className="text-xs font-mono text-primary-foreground/75">GSTIN: {customer.gst_number}</p>}
+                </div>
               </div>
             </div>
             <div className="divide-y divide-border px-5 py-2">
@@ -798,12 +821,41 @@ function InvoicePage() {
             <div className="space-y-1 border-t border-border bg-muted/35 px-5 py-5 text-sm">
               <Row label="Subtotal" value={money(data.subtotal)} />
               {data.discount > 0 && <Row label="Discount" value={`- ${money(data.discount)}`} />}
-              {data.tax_amount > 0 && <Row label="GST (Tax)" value={money(data.tax_amount)} />}
+              {data.tax_amount > 0 && (
+                <>
+                  {business.data?.gst_number && customer?.gst_number && business.data.gst_number.substring(0, 2) !== customer.gst_number.substring(0, 2) ? (
+                    <Row label="IGST" value={money(data.tax_amount)} />
+                  ) : (
+                    <>
+                      <Row label="CGST" value={money(data.tax_amount / 2)} />
+                      <Row label="SGST" value={money(data.tax_amount / 2)} />
+                    </>
+                  )}
+                </>
+              )}
               <div className="flex items-center justify-between pt-2">
                 <span className="font-bold">Grand total</span>
-                <span className="mono text-2xl">{money(data.total_amount)}</span>
+                <span className="mono text-2xl font-bold">{money(data.total_amount)}</span>
+              </div>
+              <div className="flex items-center justify-between pt-1 text-xs text-muted-foreground">
+                <span>Paid amount</span>
+                <span className="mono">{money(data.paid_amount || 0)}</span>
+              </div>
+              <div className="flex items-center justify-between pt-1 font-semibold text-sm">
+                <span>Balance due</span>
+                <span className="mono text-base text-primary">{money(data.total_amount - (data.paid_amount || 0))}</span>
               </div>
             </div>
+            {business.data?.bank_name && business.data?.bank_account_number && business.data?.bank_ifsc && (
+              <div className="border-t border-border px-5 py-3 text-xs bg-muted/20">
+                <p className="font-bold uppercase tracking-wider text-[10px] text-muted-foreground mb-1">Bank Payment Details</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <p><span className="text-muted-foreground">Bank:</span> {business.data.bank_name}</p>
+                  <p><span className="text-muted-foreground">A/C:</span> {business.data.bank_account_number}</p>
+                  <p><span className="text-muted-foreground">IFSC:</span> {business.data.bank_ifsc}</p>
+                </div>
+              </div>
+            )}
           </SectionCard>
           <div className="space-y-4">
             <SectionCard className="p-5">

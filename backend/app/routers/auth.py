@@ -33,6 +33,7 @@ from app.security import (
     create_access_token,
     hash_password,
     verify_password,
+    DUMMY_PASSWORD_HASH,
 )
 
 
@@ -137,6 +138,10 @@ def login(
     )
 
     if user is None:
+        # Run a dummy hash check so the response time is the same whether the
+        # email exists or not.  Without this an attacker can enumerate valid
+        # emails by measuring how quickly the server replies.
+        verify_password(data.password, DUMMY_PASSWORD_HASH)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",

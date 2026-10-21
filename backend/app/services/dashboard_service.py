@@ -37,6 +37,7 @@ class DashboardService:
         invoices = self._invoice_repository.list_all(
             business_id
         )
+        invoices = [i for i in invoices if i.status != "cancelled"]
 
         stock_items = self._stock_repository.list_active(
             business_id
@@ -94,6 +95,7 @@ class DashboardService:
         invoices = self._invoice_repository.list_all(
             business_id
         )
+        invoices = [i for i in invoices if i.status != "cancelled"]
 
         sales_by_date: dict[date, float] = defaultdict(float)
         invoice_count_by_date: dict[date, int] = defaultdict(int)
@@ -201,6 +203,7 @@ class DashboardService:
         from app.repositories.transaction import TransactionRepository
 
         invoices = self._invoice_repository.list_all(business_id)
+        invoices = [i for i in invoices if i.status != "cancelled"]
         
         gross_sales = sum(float(i.subtotal or 0.0) for i in invoices)
         discounts_given = sum(float(i.discount or 0.0) for i in invoices)
@@ -221,9 +224,9 @@ class DashboardService:
         customer_stats = defaultdict(float)
 
         for inv in invoices:
-            transaction = transaction_repo.get(business_id, inv.transaction_id)
+            transaction = transaction_repo.get(inv.transaction_id, business_id)
             if transaction:
-                items = transaction_repo.list_items(business_id, transaction.id)
+                items = transaction_repo.list_items(transaction.id, business_id)
                 for item in items:
                     product_stats[item.stock_id]["qty"] += float(item.qty)
                     product_stats[item.stock_id]["rev"] += float(item.line_total)

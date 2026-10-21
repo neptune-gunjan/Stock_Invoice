@@ -17,7 +17,7 @@ eventual backend.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from app.models.transaction import Transaction, TransactionItem
@@ -31,6 +31,7 @@ from app.services.stock_service import StockNotFoundError, StockService
 from app.models.stock_movement import StockMovement
 from app.models.invoice import Invoice
 from app.repositories.invoice import InvoiceRepository
+from app.repositories.business import BusinessRepository
 
 class InsufficientStockError(Exception):
     def __init__(
@@ -59,6 +60,7 @@ class TransactionService:
         stock_movement_repository: StockMovementRepository,
         invoice_repository: InvoiceRepository,
         payment_repository: Optional[PaymentRepository] = None,
+        business_repository: Optional[BusinessRepository] = None,
     ) -> None:
         self._repository = repository
         self._stock_service = stock_service
@@ -66,14 +68,13 @@ class TransactionService:
         self._stock_movement_repository = stock_movement_repository
         self._invoice_repository = invoice_repository
         self._payment_repository = payment_repository
+        self._business_repository = business_repository
 
     def confirm(
         self,
         request: ConfirmRequest,
         business_id: uuid.UUID,
     ) -> tuple[Transaction, list[TransactionItem], Invoice]:
-        # Validate the customer (if any) up front, alongside every line,
-        # before writing anything -- see the atomicity note above.
         if request.customer_id is not None:
             self._customer_service.require_active(
                 request.customer_id,
@@ -81,6 +82,8 @@ class TransactionService:
             )
 
         resolved = []
+        running_stock = {}
+
         for line in request.items:
             stock_item = self._stock_service.get_active(
                 line.stock_id,
@@ -88,32 +91,43 @@ class TransactionService:
             )
             if stock_item is None:
                 raise StockNotFoundError(line.stock_id)
-            if stock_item.quantity_available < line.qty:
+
+            current_available = running_stock.get(stock_item.id, stock_item.quantity_available)
+
+            if current_available < line.qty:
                 raise InsufficientStockError(
                     line.stock_id,
                     stock_item.name,
                     line.qty,
-                    stock_item.quantity_available,
+                    current_available,
                 )
+            
+            running_stock[stock_item.id] = current_available - line.qty
 
-            # Wholesale rate flexibility: use custom rate if provided, else catalog price
             unit_price = line.unit_price if line.unit_price is not None else stock_item.unit_price
             line_discount = line.discount if line.discount is not None else 0.0
             line_total = max((unit_price * line.qty) - line_discount, 0.0)
 
+            if line.raw_text and line.raw_text.strip():
+                raw = line.raw_text.strip()
+                if raw.lower() != stock_item.name.lower():
+                    current_aliases_lower = [a.lower() for a in stock_item.aliases]
+                    if raw.lower() not in current_aliases_lower:
+                        new_aliases = stock_item.aliases + [raw]
+                        self._stock_service.update_stock(
+                            stock_item.id,
+                            StockUpdate(aliases=new_aliases),
+                            business_id,
+                        )
+
             resolved.append((stock_item, line.qty, unit_price, line_total))
 
-        subtotal = sum(
-            line_total
-            for _, _, _, line_total in resolved
-        )
-
+        subtotal = sum(line_total for _, _, _, line_total in resolved)
         discount = request.discount
 
         if discount > subtotal:
             raise ValueError("discount cannot be greater than subtotal")
 
-        # Distribute global discount proportionally to calculate exact tax per item
         tax_amount = 0.0
         calculated_items = []
         for stock_item, qty, unit_price, line_total in resolved:
@@ -124,6 +138,32 @@ class TransactionService:
             calculated_items.append((stock_item, qty, unit_price, line_total, stock_item.gst_rate, item_tax))
 
         total_amount = (subtotal - discount) + tax_amount
+
+        if request.customer_id is not None:
+            customer = self._customer_service.require_active(request.customer_id, business_id=business_id)
+            if customer.credit_limit and customer.credit_limit > 0:
+                recent_txs = self._repository.list_by_customer(customer.id, business_id)
+                total_outstanding = 0.0
+                for tx in recent_txs:
+                    inv = self._invoice_repository.get_by_transaction(tx.id, business_id)
+                    if inv and inv.deleted_at is None:
+                        payments = self._payment_repository.list_by_invoice(inv.id) if self._payment_repository else []
+                        paid = sum(p.amount for p in payments)
+                        total_outstanding += max(inv.total_amount - paid, 0.0)
+                
+                paid_now = min(request.initial_payment_amount or 0.0, total_amount)
+                projected_outstanding = total_outstanding + (total_amount - paid_now)
+                if projected_outstanding > customer.credit_limit:
+                    raise ValueError(f"Transaction exceeds customer credit limit of Rs. {customer.credit_limit:g}. Projected outstanding: Rs. {projected_outstanding:g}")
+
+        # Duplicate submission check
+        recent_txs = self._repository.list_all(business_id)
+        now = datetime.now(timezone.utc)
+        for tx in recent_txs:
+            if tx.created_at:
+                if 0 <= (now - tx.created_at).total_seconds() < 10:
+                    if tx.customer_id == request.customer_id and abs(tx.total_amount - total_amount) < 0.01:
+                        raise ValueError("Duplicate submission detected. An identical invoice was created seconds ago.")
 
         transaction = Transaction(
             business_id=business_id,
@@ -150,6 +190,13 @@ class TransactionService:
         ]
         self._repository.add(transaction, items)
 
+        due_date = None
+        if request.customer_id is not None:
+            customer = self._customer_service.require_active(request.customer_id, business_id=business_id)
+            if customer.payment_terms_days and customer.payment_terms_days > 0:
+                from datetime import timedelta
+                due_date = datetime.now(timezone.utc) + timedelta(days=customer.payment_terms_days)
+
         invoice = Invoice(
             business_id=business_id,
             invoice_number=self._generate_invoice_number(business_id),
@@ -160,11 +207,11 @@ class TransactionService:
             tax_rate=request.tax_rate,
             tax_amount=transaction.tax,
             total_amount=transaction.total_amount,
+            due_date=due_date,
         )
 
         self._invoice_repository.add(invoice)
 
-        # Record upfront counter payment if specified
         if request.initial_payment_amount and request.initial_payment_amount > 0 and self._payment_repository:
             from app.models.payment import Payment
             paid_now = min(request.initial_payment_amount, total_amount)
@@ -179,26 +226,41 @@ class TransactionService:
             invoice.payment_method = request.initial_payment_method or "cash"
             self._invoice_repository.update(invoice, business_id)
 
+        # Apply stock movements using aggregated quantities
+        stock_deductions = {}
         for stock_item, qty, _, _ in resolved:
-            quantity_before = stock_item.quantity_available
-            quantity_after = quantity_before - qty
+            if stock_item.id not in stock_deductions:
+                stock_deductions[stock_item.id] = {"item": stock_item, "qty": 0}
+            stock_deductions[stock_item.id]["qty"] += qty
 
-            self._stock_service.update_stock_quantity_without_movement(
-                stock_item.id,
-                quantity_after=quantity_after,
-                business_id=business_id,
-            )
+        for deduction in stock_deductions.values():
+            item = deduction["item"]
+            total_qty = deduction["qty"]
+            
+            fresh_item = self._stock_service.get_active(item.id, business_id)
+            if fresh_item:
+                quantity_before = fresh_item.quantity_available
+                quantity_after = quantity_before - total_qty
 
-            self._stock_movement_repository.add(
-                StockMovement(
-                    stock_id=stock_item.id,
-                    movement_type="sale",
-                    quantity=qty,
-                    quantity_before=quantity_before,
-                    quantity_after=quantity_after,
-                    reference_id=transaction.id,
+                success = self._stock_service.decrement_stock(
+                    fresh_item.id,
+                    amount=total_qty,
+                    business_id=business_id,
                 )
-            )
+                
+                if not success:
+                    raise ValueError(f"Insufficient stock for {fresh_item.name} during concurrent checkout.")
+
+                self._stock_movement_repository.add(
+                    StockMovement(
+                        stock_id=fresh_item.id,
+                        movement_type="sale",
+                        quantity=total_qty,
+                        quantity_before=quantity_before,
+                        quantity_after=quantity_after,
+                        reference_id=transaction.id,
+                    )
+                )
 
         return transaction, items, invoice
 
@@ -224,29 +286,23 @@ class TransactionService:
         business_id: uuid.UUID,
     ) -> str:
 
-        invoices = self._invoice_repository.list_all(
-            business_id
-        )
-
+        business = self._business_repository.get(business_id) if self._business_repository else None
+        prefix = business.invoice_prefix if business else "INV"
+        
         year = datetime.now().year
-        prefix = f"INV-{year}-"
-
-        numbers = []
-
-        for invoice in invoices:
-
-            if invoice.invoice_number.startswith(prefix):
-                try:
-                    numbers.append(
-                        int(
-                            invoice.invoice_number[
-                                len(prefix):
-                            ]
-                        )
-                    )
-                except ValueError:
-                    continue
-
-        next_number = max(numbers, default=0) + 1
+        prefix = f"{prefix}-{year}-"
+        
+        if self._business_repository:
+            next_number = self._business_repository.increment_invoice_counter(business_id)
+        else:
+            invoices = self._invoice_repository.list_all(business_id)
+            numbers = []
+            for invoice in invoices:
+                if invoice.invoice_number.startswith(prefix):
+                    try:
+                        numbers.append(int(invoice.invoice_number[len(prefix):]))
+                    except ValueError:
+                        continue
+            next_number = max(numbers, default=0) + 1
 
         return f"{prefix}{next_number:06d}"

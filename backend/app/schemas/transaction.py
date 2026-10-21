@@ -19,6 +19,7 @@ class ConfirmItemInput(BaseModel):
     unit_price: Optional[float] = Field(default=None, ge=0)
     discount: float = Field(default=0, ge=0)
     extracted_item_id: Optional[uuid.UUID] = None
+    raw_text: Optional[str] = None
 
 
 class ConfirmRequest(BaseModel):

@@ -8,11 +8,11 @@ const nav = [
   { href: '/dashboard', label: 'Overview', shortcut: 'Alt+D', icon: BarChart3 },
   { href: '/reports', label: 'Reports', icon: PieChart },
   { href: '/business', label: 'Business', icon: Store },
-  { href: '/catalog', label: 'Stock catalog', shortcut: 'Alt+S', icon: Boxes },
+  { href: '/catalog', label: 'Products', shortcut: 'Alt+S', icon: Boxes },
   { href: '/purchase', label: 'Stock In', icon: PackagePlus },
-  { href: '/upload', label: 'New invoice', shortcut: 'Alt+N', icon: FilePlus2 },
-  { href: '/review', label: 'Quick Bill ⚡', shortcut: 'Alt+Q', icon: Zap, highlight: true },
-  { href: '/customers', label: 'Customers', shortcut: 'Alt+C', icon: Users },
+  { href: '/upload', label: 'AI Bill Scanner', shortcut: 'Alt+N', icon: FilePlus2 },
+  { href: '/review', label: 'Create Bill ⚡', shortcut: 'Alt+Q', icon: Zap, highlight: true },
+  { href: '/customers', label: 'Parties', shortcut: 'Alt+C', icon: Users },
   { href: '/transactions', label: 'Transactions', icon: History },
 ];
 
@@ -164,18 +164,18 @@ export function AppShell({ children }: { children: ReactNode }) {
         </header>
         <div className="px-5 pb-24 pt-7 md:px-9 md:pb-10">{children}</div>
       </main>
-      <div className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-6 border-t border-border bg-card/95 px-2 py-2 backdrop-blur md:hidden">
+      <div className="fixed inset-x-0 bottom-0 z-30 flex overflow-x-auto border-t border-border bg-card/95 px-2 py-2 backdrop-blur md:hidden scrollbar-hide">
         {nav.map(({ href, label, icon: Icon }) => (
           <Link
             key={href}
             href={href}
             data-testid={`link-mobile-${label.toLowerCase().replace(' ', '-')}`}
-            className={`grid min-h-12 place-items-center gap-1 rounded-lg text-[10px] font-semibold ${
+            className={`flex min-w-[72px] shrink-0 flex-col items-center gap-1 rounded-lg p-2 text-[10px] font-semibold ${
               active(href) ? 'text-primary' : 'text-muted-foreground'
             }`}
           >
             <Icon size={18} />
-            <span>{label === 'New invoice' ? 'New' : label.split(' ')[0]}</span>
+            <span className="truncate w-full text-center">{label === 'New invoice' ? 'New' : label.split(' ')[0]}</span>
           </Link>
         ))}
       </div>

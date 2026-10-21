@@ -13,6 +13,16 @@ from jose import JWTError, jwt
 from app.config import get_settings
 
 
+# Pre-computed bcrypt hash used as a timing-safe sentinel in the login handler.
+# When a login attempt uses an e-mail that does not exist in the database we
+# still run bcrypt.checkpw against this hash so that the response time is
+# indistinguishable from a real wrong-password attempt, preventing user
+# enumeration via timing side-channels.
+DUMMY_PASSWORD_HASH: str = (
+    "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW"
+)
+
+
 def hash_password(password: str) -> str:
     password_bytes = password.encode("utf-8")
 

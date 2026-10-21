@@ -244,12 +244,19 @@
                     {% if customer_phone %}
                         <br><span style="font-size: 9pt; color:#64748b">Phone: {{ customer_phone }}</span>
                     {% endif %}
+                    {% if customer_gst_number %}
+                        <br><span style="font-size: 9pt; color:#64748b">GSTIN: {{ customer_gst_number }}</span>
+                    {% endif %}
                 </div>
             </div>
             
             <div class="meta-box">
                 <div class="label">Issue Date</div>
                 <div class="value">{{ invoice_date }}</div>
+                {% if due_date %}
+                <div class="label" style="margin-top: 10px;">Due Date</div>
+                <div class="value" style="color: #b91c1c;">{{ due_date }}</div>
+                {% endif %}
             </div>
 
             <div class="meta-box">
@@ -287,6 +294,14 @@
                 {% if payment_method %}
                 <p style="margin-top: 15px;">Payment Method: <strong>{{ payment_method|replace("_", " ")|title }}</strong></p>
                 {% endif %}
+                {% if bank_name and bank_account_number and bank_ifsc %}
+                <div style="margin-top: 20px; font-size: 9.5pt; color: #475569; border-top: 1px solid #e2e8f0; padding-top: 10px; width: 85%;">
+                    <strong style="color: #0f172a;">Bank Details</strong><br>
+                    Bank: {{ bank_name }}<br>
+                    A/C No: {{ bank_account_number }}<br>
+                    IFSC: {{ bank_ifsc }}
+                </div>
+                {% endif %}
             </div>
 
             <table class="summary-table">
@@ -301,10 +316,22 @@
                 </tr>
                 {% endif %}
                 {% if tax_amount > 0 %}
+                {% set is_igst = gst_number and customer_gst_number and (gst_number[:2] != customer_gst_number[:2]) %}
+                {% if is_igst %}
                 <tr>
-                    <td>Tax ({{ "%.1f"|format(tax_rate) }}%)</td>
+                    <td>IGST ({{ "%.1f"|format(tax_rate) }}%)</td>
                     <td class="num">Rs. {{ "%.2f"|format(tax_amount) }}</td>
                 </tr>
+                {% else %}
+                <tr>
+                    <td>CGST ({{ "%.1f"|format(tax_rate / 2) }}%)</td>
+                    <td class="num">Rs. {{ "%.2f"|format(tax_amount / 2) }}</td>
+                </tr>
+                <tr>
+                    <td>SGST ({{ "%.1f"|format(tax_rate / 2) }}%)</td>
+                    <td class="num">Rs. {{ "%.2f"|format(tax_amount / 2) }}</td>
+                </tr>
+                {% endif %}
                 {% endif %}
                 <tr class="grand-total">
                     <td>Current Bill Total</td>

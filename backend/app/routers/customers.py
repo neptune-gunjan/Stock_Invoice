@@ -86,6 +86,37 @@ def create_customer(
     )
 
 
+@router.get(
+    "/{customer_id}",
+    response_model=CustomerRead,
+)
+def get_customer(
+    customer_id: uuid.UUID,
+    service: CustomerService = Depends(
+        get_customer_service
+    ),
+    current_user: User = Depends(
+        get_current_user
+    ),
+) -> CustomerRead:
+    if current_user.business_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User is not associated with a business.",
+        )
+
+    try:
+        return service.get_customer(
+            customer_id,
+            business_id=current_user.business_id,
+        )
+    except CustomerNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+
 @router.patch(
     "/{customer_id}",
     response_model=CustomerRead,

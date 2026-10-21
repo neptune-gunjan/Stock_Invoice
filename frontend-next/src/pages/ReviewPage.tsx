@@ -9,16 +9,24 @@ export interface ReviewRow {
   itemSearch: string;           // combobox search text for this row
 }
 
+/** Shape stored in sessionStorage by the extraction/upload flow. */
 export interface ReviewPayload {
   job_id: string | null;
-  items: Array<any>;
+  items: Array<{
+    id: string;
+    raw_text?: string;
+    matched_stock_id?: string | null;
+    matched_stock_name?: string | null;
+    qty?: number | null;
+  }>;
 }
 
-export const isUuid = (val: any) => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+export const isUuid = (val: unknown): val is string =>
+  typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
 
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent, type ReactNode } from 'react';
 import { Link, Route, Router as WouterRouter, Switch, useLocation, useParams } from 'wouter';
 import {
   AlertCircle,
@@ -622,7 +630,7 @@ interface ItemComboboxProps {
   'data-testid'?: string;
 }
 
-function ItemCombobox({
+const ItemCombobox = memo(function ItemCombobox({
   stockItems,
   selectedStockId,
   searchText,
@@ -784,10 +792,248 @@ function ItemCombobox({
       )}
     </div>
   );
-}
+});
 
 
 import { useToast } from '@/hooks/use-toast';
+
+/* ---------------------------------------------------------------------------
+ * BillingRow — memoized so sibling row updates don't cause a full re-render
+ * of every row.  Receives only primitives + stable callbacks.
+ * ------------------------------------------------------------------------ */
+
+interface BillingRowProps {
+  row: ReviewRow;
+  index: number;
+  jobId: string | null;
+  stockItem: StockItem | undefined;
+  stockItems: StockItem[];
+  lineTotal: number;
+  needsReview: boolean;
+  hasShortage: boolean;
+  available: number;
+  shortage: number;
+  update: (id: string, patch: Partial<ReviewRow>) => void;
+  onDelete: (id: string) => void;
+  handleFieldKeyDown: (e: React.KeyboardEvent<HTMLInputElement>, fieldName: string, id: string, idx: number) => void;
+}
+
+const BillingRow = memo(function BillingRow({
+  row,
+  index,
+  jobId,
+  stockItem,
+  stockItems,
+  lineTotal,
+  needsReview,
+  hasShortage,
+  available,
+  shortage,
+  update,
+  onDelete,
+  handleFieldKeyDown,
+}: BillingRowProps) {
+  return (
+    <div
+      key={row.id}
+      className={`grid grid-cols-2 gap-4 px-4 py-5 lg:items-center lg:gap-3 lg:px-5 ${
+        jobId
+          ? 'lg:grid-cols-[1.1fr_1.3fr_.5fr_.8fr_.8fr_.8fr_40px]'
+          : 'lg:grid-cols-[2fr_.5fr_.8fr_.8fr_.8fr_40px]'
+      } ${
+        needsReview
+          ? 'bg-secondary/10'
+          : ''
+      }`}
+      data-testid={`row-review-${row.id}`}
+    >
+
+      {jobId && (
+        <div className="col-span-2 lg:col-span-1">
+          <div className="flex items-center gap-2">
+            <span className="mono text-[10px] text-muted-foreground">0{index + 1}</span>
+            <input
+              className={`${inputClass} !min-h-9`}
+              value={row.raw_text}
+              onChange={(e) => update(row.id, { raw_text: e.target.value })}
+              placeholder="item"
+              data-testid={`input-review-rawtext-${row.id}`}
+            />
+            {needsReview && (
+              <span className="rounded-full bg-secondary px-2 py-1 text-[9px] font-extrabold uppercase text-primary">Check</span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {jobId && (
+        <div className="col-span-2 lg:col-span-1">
+          <ItemCombobox
+            stockItems={stockItems}
+            selectedStockId={row.stock_id}
+            searchText={row.itemSearch}
+            needsReview={needsReview}
+            onSelect={(item) =>
+              update(row.id, {
+                stock_id: item?.id ?? null,
+                itemSearch: item?.name ?? '',
+                unit_price: row.unit_price != null ? row.unit_price : null,
+              })
+            }
+            onSearchChange={(text) => update(row.id, { itemSearch: text })}
+            data-testid={`combobox-review-item-${row.id}`}
+          />
+        </div>
+      )}
+
+      {!jobId && (
+        <div className="col-span-2 lg:col-span-1">
+          <div className="flex items-center gap-2">
+            <span className="mono text-[10px] text-muted-foreground">0{index + 1}</span>
+            <div>
+              <p className="text-sm font-bold">{stockItem?.name || 'Select an item'}</p>
+              <p className="text-[10px] text-muted-foreground">{stockItem?.sku ? stockItem.sku : 'Unknown SKU'}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quantity */}
+      <div className="flex flex-col gap-1 col-span-1">
+        <span className="lg:hidden text-[10px] text-muted-foreground uppercase tracking-wider font-bold">Qty</span>
+        <input
+          type="number"
+          min="1"
+          step="1"
+          className={`${inputClass} ${
+            hasShortage
+              ? 'border-amber-400 focus:border-amber-500'
+              : ''
+          }`}
+          value={row.qty}
+          onChange={(e) =>
+            update(row.id, {
+              qty: Number(e.target.value),
+            })
+          }
+          onKeyDown={(e) => handleFieldKeyDown(e, 'qty', row.id, index)}
+          data-testid={`input-review-quantity-${row.id}`}
+        />
+      </div>
+
+      {/* Rate — editable for wholesale custom pricing */}
+      <div className="flex flex-col gap-1 col-span-1">
+        <span className="lg:hidden text-[10px] text-muted-foreground uppercase tracking-wider font-bold">Rate</span>
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          className={`${inputClass} !min-h-9 lg:text-right`}
+          value={row.unit_price ?? (stockItem?.unit_price ?? '')}
+          onChange={(e) =>
+            update(row.id, {
+              unit_price:
+                e.target.value === ''
+                  ? null
+                  : Number(e.target.value),
+            })
+          }
+          onKeyDown={(e) => handleFieldKeyDown(e, 'rate', row.id, index)}
+          placeholder={stockItem ? String(stockItem.unit_price) : '—'}
+          title="Edit rate for this line"
+          data-testid={`input-review-rate-${row.id}`}
+        />
+        {stockItem && row.unit_price != null && row.unit_price !== stockItem.unit_price && (
+          <span className="text-[10px] text-muted-foreground lg:text-right">
+            catalog: {money(stockItem.unit_price)}
+          </span>
+        )}
+      </div>
+
+      {/* Discount — editable for per-line discount */}
+      <div className="flex flex-col gap-1 col-span-1">
+        <span className="lg:hidden text-[10px] text-muted-foreground uppercase tracking-wider font-bold">Disc.</span>
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          className={`${inputClass} !min-h-9 lg:text-right`}
+          value={row.line_discount || ''}
+          onChange={(e) =>
+            update(row.id, {
+              line_discount: Number(e.target.value),
+            })
+          }
+          onKeyDown={(e) => handleFieldKeyDown(e, 'discount', row.id, index)}
+          placeholder="0"
+          title="Discount for this line"
+          data-testid={`input-review-discount-${row.id}`}
+        />
+      </div>
+
+      {/* Partial availability warning */}
+      {hasShortage && (
+        <div className="md:col-span-6 rounded-xl border border-amber-300 bg-amber-50 px-3 py-3 dark:border-amber-700 dark:bg-amber-950/30">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-start gap-2">
+              <span className="mt-0.5 text-amber-600">⚠</span>
+              <div className="text-xs">
+                <p className="font-bold text-amber-800 dark:text-amber-300">
+                  Partial availability
+                </p>
+                <p className="mt-0.5 text-amber-700 dark:text-amber-400">
+                  Requested{' '}
+                  <strong>{row.qty}</strong>{' '}
+                  {stockItem?.unit}
+                  {' · '}
+                  Available{' '}
+                  <strong>{available}</strong>{' '}
+                  {stockItem?.unit}
+                  {' · '}
+                  Short{' '}
+                  <strong>{shortage}</strong>
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                update(row.id, {
+                  qty: available,
+                })
+              }
+              className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-900/50"
+            >
+              Use {available}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Line total */}
+      <div className="flex flex-col gap-1 col-span-1 lg:text-right">
+        <span className="lg:hidden text-[10px] text-muted-foreground uppercase tracking-wider font-bold">Total</span>
+        <span className="mono text-sm font-medium mt-1">
+          {money(lineTotal)}
+        </span>
+      </div>
+
+      {/* Delete */}
+      <div className="col-span-2 lg:col-span-1 flex justify-end lg:justify-center">
+        <button
+          type="button"
+          onClick={() => onDelete(row.id)}
+          className="grid h-10 w-10 place-items-center rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+          aria-label={`Delete ${row.raw_text || 'row'}`}
+          data-testid={`button-delete-review-${row.id}`}
+        >
+          <Trash2 size={16} />
+        </button>
+      </div>
+
+    </div>
+  );
+});
 
 function ReviewPage() {
   const [, setLocation] = useLocation();
@@ -795,6 +1041,7 @@ function ReviewPage() {
   const stock = useStock();
   const [jobId, setJobId] = useState<string | null>(null);
   const [rows, setRows] = useState<ReviewRow[]>([]);
+  const [query, setQuery] = useState('');
   const customers = useCustomers();
 
   const [customer, setCustomer] = useState({
@@ -828,7 +1075,7 @@ function ReviewPage() {
           saved.items.map((item) => ({
             id: item.id,
             raw_text: item.raw_text,
-            stock_id: item.matched_stock_id,
+            stock_id: item.matched_stock_id ?? null,
             qty: item.qty && item.qty > 0 ? item.qty : 1,
             unit_price: null,
             line_discount: 0,
@@ -854,6 +1101,18 @@ function ReviewPage() {
       setRows([]);
     }
   }, []);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // Show warning if there are items added (more than just the default empty row)
+      if (rows.length > 0 && rows.some(r => r.stock_id || r.raw_text)) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [rows]);
 
   const stockById = useMemo(() => {
     const map = new Map<string, StockItem>();
@@ -891,18 +1150,22 @@ function ReviewPage() {
     0,
   );
 
-  const update = (id: string, patch: Partial<ReviewRow>) =>
+  // Stable callback — identity only changes when setRows changes (never).
+  // This is what allows React.memo on BillingRow to actually skip re-renders.
+  const update = useCallback((id: string, patch: Partial<ReviewRow>) =>
     setRows((current) =>
       current.map((row) =>
         row.id === id ? { ...row, ...patch } : row,
       ),
-    );
+    ),
+  []);
 
-  const addRow = () =>
+  const addRow = useCallback(() => {
+    const id = `manual-${Date.now()}`;
     setRows((current) => [
       ...current,
       {
-        id: `manual-${Date.now()}`,
+        id,
         raw_text: '',
         stock_id: null,
         qty: 1,
@@ -912,6 +1175,84 @@ function ReviewPage() {
         itemSearch: '',
       },
     ]);
+    setTimeout(() => {
+      const el = document.querySelector(`[data-testid="combobox-review-item-${id}"]`) as HTMLInputElement;
+      if (el) { el.focus(); el.select(); }
+    }, 50);
+  }, []);
+
+  const handleFieldKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>, fieldName: string, id: string, idx: number) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (fieldName === 'qty') {
+        const next = document.querySelector(`[data-testid="input-review-rate-${id}"]`) as HTMLInputElement;
+        if (next) { next.focus(); next.select(); }
+      } else if (fieldName === 'rate') {
+        const next = document.querySelector(`[data-testid="input-review-discount-${id}"]`) as HTMLInputElement;
+        if (next) { next.focus(); next.select(); }
+      } else if (fieldName === 'discount') {
+        // Use setRows functional form to read latest rows without capturing stale closure
+        setRows((current) => {
+          if (idx === current.length - 1) {
+            addRow();
+          } else {
+            const nextRow = current[idx + 1];
+            setTimeout(() => {
+              const next = document.querySelector(`[data-testid="combobox-review-item-${nextRow.id}"]`) as HTMLInputElement;
+              if (next) { next.focus(); next.select(); }
+            }, 0);
+          }
+          return current; // no actual change
+        });
+      }
+    }
+  }, [addRow]);
+
+  const onDeleteRow = useCallback((id: string) => {
+    setRows((current) => current.filter((r) => r.id !== id));
+  }, []);
+
+  const searchResults = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    return (stock.data ?? [])
+      .filter((item) => {
+        return (
+          item.name.toLowerCase().includes(q) ||
+          (item.sku ?? '').toLowerCase().includes(q) ||
+          (item.aliases ?? []).some((a) => a.toLowerCase().includes(q))
+        );
+      })
+      .slice(0, 5);
+  }, [stock.data, query]);
+
+  const addToBill = (item: StockItem) => {
+    // Replace the first row if it's empty
+    setRows((current) => {
+      const isFirstRowEmpty = current.length === 1 && !current[0].stock_id && !current[0].itemSearch && !current[0].raw_text;
+      const newRow = {
+        id: `manual-${Date.now()}`,
+        raw_text: '',
+        stock_id: item.id,
+        qty: 1,
+        unit_price: null,
+        line_discount: 0,
+        extracted_item_id: null,
+        itemSearch: item.name,
+      };
+      
+      if (isFirstRowEmpty) return [newRow];
+      
+      // Auto focus qty of this new row in next tick (hacky but works without refs for simple UI)
+      setTimeout(() => {
+        const input = document.querySelector(`[data-testid="input-review-quantity-${newRow.id}"]`) as HTMLInputElement;
+        if (input) { input.focus(); input.select(); }
+      }, 50);
+      
+      return [...current, newRow];
+    });
+    setQuery('');
+  };
 
   // -----------------------------------------------------------------------
   // Barcode Scanner Integration
@@ -1242,12 +1583,52 @@ function ReviewPage() {
          * Review Items
          * --------------------------------------------------------- */}
 
-        <div className="overflow-x-auto pb-4">
-        <SectionCard className="min-w-[1000px] overflow-hidden">
+        {!jobId && (
+          <SectionCard className="mb-6 overflow-visible p-5 relative">
+            <h2 className="mb-4 text-sm font-bold">Search items to add</h2>
+            <div className="relative">
+              <Search className="absolute left-3 top-2.5 text-muted-foreground" size={16} />
+              <input
+                className={`${inputClass} pl-10`}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search catalog by name, sku, alias... (Press Enter to add first result)"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && searchResults.length > 0) {
+                    e.preventDefault();
+                    addToBill(searchResults[0]);
+                  }
+                }}
+              />
 
-          <div className="grid grid-cols-[1.1fr_1.3fr_.5fr_.8fr_.8fr_.8fr_40px] gap-3 border-b border-border bg-muted/45 px-5 py-3 mono text-[10px] uppercase tracking-wider text-muted-foreground">
-            <span>Written as</span>
-            <span>Catalog match</span>
+              {query.length > 0 && searchResults.length > 0 && (
+                <div className="absolute top-full left-0 right-0 z-10 mt-1 rounded-xl border border-border bg-card shadow-lg overflow-hidden">
+                  {searchResults.map((res) => (
+                    <button
+                      key={res.id}
+                      onClick={() => addToBill(res)}
+                      className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-muted"
+                    >
+                      <div>
+                        <p className="text-sm font-bold">{res.name}</p>
+                        <p className="text-[10px] text-muted-foreground">Available: {res.quantity_available} {res.unit}</p>
+                      </div>
+                      <Plus size={16} className="text-muted-foreground" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </SectionCard>
+        )}
+
+        <div className="pb-4">
+        <SectionCard className="w-full overflow-hidden">
+
+          <div className={`hidden lg:grid ${jobId ? 'lg:grid-cols-[1.1fr_1.3fr_.5fr_.8fr_.8fr_.8fr_40px]' : 'lg:grid-cols-[2fr_.5fr_.8fr_.8fr_.8fr_40px]'} gap-3 border-b border-border bg-muted/45 px-5 py-3 mono text-[10px] uppercase tracking-wider text-muted-foreground`}>
+            {jobId && <span>Written as</span>}
+            {jobId && <span>Catalog match</span>}
+            {!jobId && <span>Item Details</span>}
             <span>Qty</span>
             <span>Rate ✎</span>
             <span>Disc. ✎</span>
@@ -1262,226 +1643,29 @@ function ReviewPage() {
                 ? stockById.get(row.stock_id)
                 : undefined;
 
+              const available = stockItem?.quantity_available ?? 0;
+              const shortage = Math.max(row.qty - available, 0);
               const needsReview = !row.stock_id;
-
-              const available =
-                stockItem?.quantity_available ?? 0;
-
-              const shortage = Math.max(
-                row.qty - available,
-                0,
-              );
-
-              const hasShortage =
-                !!stockItem && shortage > 0;
+              const hasShortage = !!stockItem && shortage > 0;
+              const lineTotal = row.qty * (row.unit_price ?? stockItem?.unit_price ?? 0) - (row.line_discount ?? 0);
 
               return (
-                <div
+                <BillingRow
                   key={row.id}
-                  className={`grid gap-4 px-4 py-5 grid-cols-[1.1fr_1.3fr_.5fr_.8fr_.8fr_.8fr_40px] items-center gap-3 px-5 ${
-                    needsReview
-                      ? 'bg-secondary/10'
-                      : ''
-                  }`}
-                  data-testid={`row-review-${row.id}`}
-                >
-
-                  {/* Written item */}
-
-                  <div>
-                    <div className="flex items-center gap-2">
-
-                      <span className="mono text-[10px] text-muted-foreground">
-                        0{index + 1}
-                      </span>
-
-                      <input
-                        className={`${inputClass} !min-h-9`}
-                        value={row.raw_text}
-                        onChange={(e) =>
-                          update(row.id, {
-                            raw_text: e.target.value,
-                          })
-                        }
-                        placeholder="item"
-                        data-testid={`input-review-rawtext-${row.id}`}
-                      />
-
-                      {needsReview && (
-                        <span className="rounded-full bg-secondary px-2 py-1 text-[9px] font-extrabold uppercase text-primary">
-                          Check
-                        </span>
-                      )}
-
-                    </div>
-                  </div>
-
-                  {/* Catalog match — searchable combobox */}
-
-                  <ItemCombobox
-                    stockItems={stock.data ?? []}
-                    selectedStockId={row.stock_id}
-                    searchText={row.itemSearch}
-                    needsReview={needsReview}
-                    onSelect={(item) =>
-                      update(row.id, {
-                        stock_id: item?.id ?? null,
-                        itemSearch: item?.name ?? '',
-                        unit_price: row.unit_price != null ? row.unit_price : null,
-                      })
-                    }
-                    onSearchChange={(text) =>
-                      update(row.id, { itemSearch: text })
-                    }
-                    data-testid={`combobox-review-item-${row.id}`}
-                  />
-
-                  {/* Quantity */}
-
-                  <input
-                    type="number"
-                    min="1"
-                    step="1"
-                    className={`${inputClass} ${
-                      hasShortage
-                        ? 'border-amber-400 focus:border-amber-500'
-                        : ''
-                    }`}
-                    value={row.qty}
-                    onChange={(e) =>
-                      update(row.id, {
-                        qty: Number(e.target.value),
-                      })
-                    }
-                    data-testid={`input-review-quantity-${row.id}`}
-                  />
-
-                  {/* Rate — editable for wholesale custom pricing */}
-
-                  <div className="flex flex-col gap-1">
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      className={`${inputClass} !min-h-9 text-right`}
-                      value={row.unit_price ?? (stockItem?.unit_price ?? '')}
-                      onChange={(e) =>
-                        update(row.id, {
-                          unit_price:
-                            e.target.value === ''
-                              ? null
-                              : Number(e.target.value),
-                        })
-                      }
-                      placeholder={stockItem ? String(stockItem.unit_price) : '—'}
-                      title="Edit rate for this line"
-                      data-testid={`input-review-rate-${row.id}`}
-                    />
-                    {stockItem && row.unit_price != null && row.unit_price !== stockItem.unit_price && (
-                      <span className="text-[10px] text-muted-foreground text-right">
-                        catalog: {money(stockItem.unit_price)}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Discount — editable for per-line discount */}
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    className={`${inputClass} !min-h-9 text-right`}
-                    value={row.line_discount || ''}
-                    onChange={(e) =>
-                      update(row.id, {
-                        line_discount: Number(e.target.value),
-                      })
-                    }
-                    placeholder="0"
-                    title="Discount for this line"
-                    data-testid={`input-review-discount-${row.id}`}
-                  />
-
-                  {/* Partial availability warning */}
-
-                  {hasShortage && (
-                    <div className="md:col-span-6 rounded-xl border border-amber-300 bg-amber-50 px-3 py-3 dark:border-amber-700 dark:bg-amber-950/30">
-
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-
-                        <div className="flex items-start gap-2">
-
-                          <span className="mt-0.5 text-amber-600">
-                            ⚠
-                          </span>
-
-                          <div className="text-xs">
-
-                            <p className="font-bold text-amber-800 dark:text-amber-300">
-                              Partial availability
-                            </p>
-
-                            <p className="mt-0.5 text-amber-700 dark:text-amber-400">
-                              Requested{' '}
-                              <strong>{row.qty}</strong>{' '}
-                              {stockItem?.unit}
-                              {' · '}
-                              Available{' '}
-                              <strong>{available}</strong>{' '}
-                              {stockItem?.unit}
-                              {' · '}
-                              Short{' '}
-                              <strong>{shortage}</strong>
-                            </p>
-
-                          </div>
-
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            update(row.id, {
-                              qty: available,
-                            })
-                          }
-                          className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-900/50"
-                        >
-                          Use {available}
-                        </button>
-
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Line total */}
-
-                  <span className="mono text-sm font-medium md:text-right">
-                    {money(
-                      row.qty * priceFor(row) - (row.line_discount ?? 0),
-                    )}
-                  </span>
-
-                  {/* Delete */}
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setRows((current) =>
-                        current.filter(
-                          (r) => r.id !== row.id,
-                        ),
-                      )
-                    }
-                    className="grid h-10 w-10 place-items-center rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                    aria-label={`Delete ${
-                      row.raw_text || 'row'
-                    }`}
-                    data-testid={`button-delete-review-${row.id}`}
-                  >
-                    <Trash2 size={16} />
-                  </button>
-
-                </div>
+                  row={row}
+                  index={index}
+                  jobId={jobId}
+                  stockItem={stockItem}
+                  stockItems={stock.data ?? []}
+                  lineTotal={lineTotal}
+                  needsReview={needsReview}
+                  hasShortage={hasShortage}
+                  available={available}
+                  shortage={shortage}
+                  update={update}
+                  onDelete={onDeleteRow}
+                  handleFieldKeyDown={handleFieldKeyDown}
+                />
               );
             })}
 

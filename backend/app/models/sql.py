@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Float, DateTime, ForeignKey, Boolean, JSON
+from sqlalchemy import Column, String, Float, DateTime, ForeignKey, Boolean, JSON, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import uuid
@@ -13,7 +13,7 @@ class SqlStockItem(Base):
     __tablename__ = "stock_items"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    business_id = Column(UUID(as_uuid=True), index=True, nullable=False)
+    business_id = Column(UUID(as_uuid=True), ForeignKey("businesses.id"), index=True, nullable=False)
     name = Column(String, index=True, nullable=False)
     sku = Column(String, index=True, nullable=True)
     aliases = Column(JSON, default=list)
@@ -21,6 +21,8 @@ class SqlStockItem(Base):
     unit_price = Column(Float, nullable=False)
     quantity_available = Column(Float, nullable=False)
     low_stock_threshold = Column(Float, default=0)
+    hsn_code = Column(String, nullable=True)
+    gst_rate = Column(Float, default=0)
     
     created_at = Column(DateTime(timezone=True), default=utcnow)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
@@ -30,7 +32,7 @@ class SqlCustomer(Base):
     __tablename__ = "customers"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    business_id = Column(UUID(as_uuid=True), index=True, nullable=False)
+    business_id = Column(UUID(as_uuid=True), ForeignKey("businesses.id"), index=True, nullable=False)
     name = Column(String, index=True, nullable=False)
     phone = Column(String, index=True, nullable=True)
     business_name = Column(String, nullable=True)
@@ -60,6 +62,10 @@ class SqlBusiness(Base):
     invoice_prefix = Column(String, default="INV")
     logo_path = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
+    invoice_counter = Column(Integer, default=0)
+    bank_name = Column(String, nullable=True)
+    bank_account_number = Column(String, nullable=True)
+    bank_ifsc = Column(String, nullable=True)
     
     created_at = Column(DateTime(timezone=True), default=utcnow)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
@@ -69,8 +75,8 @@ class SqlTransaction(Base):
     __tablename__ = "transactions"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    business_id = Column(UUID(as_uuid=True), index=True, nullable=False)
-    customer_id = Column(UUID(as_uuid=True), ForeignKey("customers.id"), nullable=True)
+    business_id = Column(UUID(as_uuid=True), ForeignKey("businesses.id"), index=True, nullable=False)
+    customer_id = Column(UUID(as_uuid=True), ForeignKey("customers.id"), index=True, nullable=True)
     status = Column(String, nullable=False, default="confirmed")
     subtotal = Column(Float, nullable=False, default=0)
     discount = Column(Float, nullable=False, default=0)
@@ -84,22 +90,24 @@ class SqlTransactionItem(Base):
     __tablename__ = "transaction_items"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    transaction_id = Column(UUID(as_uuid=True), ForeignKey("transactions.id"), nullable=False)
-    stock_id = Column(UUID(as_uuid=True), ForeignKey("stock_items.id"), nullable=False)
+    transaction_id = Column(UUID(as_uuid=True), ForeignKey("transactions.id"), index=True, nullable=False)
+    stock_id = Column(UUID(as_uuid=True), ForeignKey("stock_items.id"), index=True, nullable=False)
     stock_name = Column(String, nullable=False)
     unit = Column(String, nullable=False)
     qty = Column(Float, nullable=False)
     unit_price = Column(Float, nullable=False)
     line_total = Column(Float, nullable=False)
+    gst_rate = Column(Float, default=0)
+    tax_amount = Column(Float, default=0)
 
 class SqlInvoice(Base):
     __tablename__ = "invoices"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    business_id = Column(UUID(as_uuid=True), index=True, nullable=False)
+    business_id = Column(UUID(as_uuid=True), ForeignKey("businesses.id"), index=True, nullable=False)
     invoice_number = Column(String, index=True, nullable=False)
-    transaction_id = Column(UUID(as_uuid=True), ForeignKey("transactions.id"), nullable=False)
-    customer_id = Column(UUID(as_uuid=True), ForeignKey("customers.id"), nullable=True)
+    transaction_id = Column(UUID(as_uuid=True), ForeignKey("transactions.id"), index=True, nullable=False)
+    customer_id = Column(UUID(as_uuid=True), ForeignKey("customers.id"), index=True, nullable=True)
     subtotal = Column(Float, nullable=False, default=0)
     discount = Column(Float, nullable=False, default=0)
     tax_rate = Column(Float, nullable=False, default=0)
@@ -109,6 +117,7 @@ class SqlInvoice(Base):
     payment_status = Column(String, nullable=False, default="pending")
     payment_method = Column(String, nullable=True)
     pdf_path = Column(String, nullable=True)
+    due_date = Column(DateTime(timezone=True), nullable=True)
     
     created_at = Column(DateTime(timezone=True), default=utcnow)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
@@ -119,7 +128,7 @@ class SqlUser(Base):
     __tablename__ = "users"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    business_id = Column(UUID(as_uuid=True), ForeignKey("businesses.id"), nullable=True)
+    business_id = Column(UUID(as_uuid=True), ForeignKey("businesses.id"), index=True, nullable=True)
     name = Column(String, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
@@ -133,7 +142,7 @@ class SqlPayment(Base):
     __tablename__ = "payments"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    invoice_id = Column(UUID(as_uuid=True), ForeignKey("invoices.id"), nullable=False)
+    invoice_id = Column(UUID(as_uuid=True), ForeignKey("invoices.id"), index=True, nullable=False)
     amount = Column(Float, nullable=False)
     payment_method = Column(String, nullable=False)
     paid_at = Column(DateTime(timezone=True), default=utcnow)
@@ -143,7 +152,7 @@ class SqlStockMovement(Base):
     __tablename__ = "stock_movements"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    stock_id = Column(UUID(as_uuid=True), ForeignKey("stock_items.id"), nullable=False)
+    stock_id = Column(UUID(as_uuid=True), ForeignKey("stock_items.id"), index=True, nullable=False)
     movement_type = Column(String, nullable=False)
     quantity = Column(Float, nullable=False)
     quantity_before = Column(Float, nullable=False)
@@ -154,7 +163,7 @@ class SqlStockMovement(Base):
 class SqlPasswordResetToken(Base):
     __tablename__ = "password_reset_tokens"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), index=True, nullable=False)
     token_hash = Column(String, nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     used = Column(Boolean, default=False)
@@ -172,11 +181,11 @@ class SqlExtractionJob(Base):
 class SqlExtractedItem(Base):
     __tablename__ = "extracted_items"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    extraction_job_id = Column(UUID(as_uuid=True), ForeignKey("extraction_jobs.id"), nullable=False)
+    extraction_job_id = Column(UUID(as_uuid=True), ForeignKey("extraction_jobs.id"), index=True, nullable=False)
     raw_text = Column(String, nullable=False)
     qty = Column(Float, nullable=True)
     unit = Column(String, nullable=True)
-    matched_stock_id = Column(UUID(as_uuid=True), ForeignKey("stock_items.id"), nullable=True)
+    matched_stock_id = Column(UUID(as_uuid=True), ForeignKey("stock_items.id"), index=True, nullable=True)
     confidence_score = Column(Float, nullable=True)
     needs_review = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), default=utcnow)

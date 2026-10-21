@@ -33,6 +33,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { AppShell, Mark } from '@/components/AppShell';
 import { ApiError, apiJson } from '@/lib/api';
+import { useConfirm } from '@/hooks/useConfirm';
 import { clearSession, hasSession, sendPasswordReset, signIn, signUp } from '@/lib/auth';
 import {
   endpoints,
@@ -583,6 +584,7 @@ function PaymentPanel({
 function CustomersPage() {
   const customers = useCustomers();
   const summary = useDashboard();
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const [query, setQuery] = useState('');
   const [customerFilter, setCustomerFilter] = useState<
@@ -608,93 +610,44 @@ function CustomersPage() {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const [customerFinancials, setCustomerFinancials] = useState<
-    Record<
+  const customerList = customers.data ?? [];
+  const invoicesReq = useInvoices();
+  const invoicesList = invoicesReq.data ?? [];
+
+  /*
+   * Batch calculate financial information using cached invoices
+   * Resolves N+1 query problem by aggregating on frontend
+   */
+  const customerFinancials = useMemo(() => {
+    const financials: Record<
       string,
       {
         totalPurchase: number;
         paidAmount: number;
         outstanding: number;
       }
-    >
-  >({});
+    > = {};
 
-  const customerList = customers.data ?? [];
+    // Initialize all customers
+    for (const customer of customerList) {
+      financials[customer.id] = {
+        totalPurchase: 0,
+        paidAmount: 0,
+        outstanding: 0,
+      };
+    }
 
-  /*
-   * Load financial information for every retailer.
-   *
-   * We use the existing customer transactions endpoint,
-   * so no backend change is required.
-   */
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadFinancials = async () => {
-      if (customerList.length === 0) {
-        setCustomerFinancials({});
-        return;
+    // Aggregate invoices
+    for (const invoice of invoicesList) {
+      if (invoice.customer_id && financials[invoice.customer_id]) {
+        financials[invoice.customer_id].totalPurchase += Number(invoice.total_amount || 0);
+        financials[invoice.customer_id].paidAmount += Number(invoice.paid_amount || 0);
+        financials[invoice.customer_id].outstanding += Number(invoice.remaining_amount || 0);
       }
+    }
 
-      const results = await Promise.all(
-        customerList.map(async (customer) => {
-          try {
-            const transactions =
-              await endpoints.customerTransactions(
-                customer.id,
-              );
-
-            const totalPurchase = transactions.reduce(
-              (sum: number, invoice) =>
-                sum + Number(invoice.total_amount || 0),
-              0,
-            );
-
-            const paidAmount = transactions.reduce(
-              (sum: number, invoice) =>
-                sum + Number(invoice.paid_amount || 0),
-              0,
-            );
-
-            const outstanding = transactions.reduce(
-              (sum: number, invoice) =>
-                sum + Number(invoice.remaining_amount || 0),
-              0,
-            );
-            return [
-              customer.id,
-              {
-                totalPurchase,
-                paidAmount,
-                outstanding,
-              },
-            ] as const;
-          } catch {
-            return [
-              customer.id,
-              {
-                totalPurchase: 0,
-                paidAmount: 0,
-                outstanding: 0,
-              },
-            ] as const;
-          }
-        }),
-      );
-
-      if (!cancelled) {
-        setCustomerFinancials(
-          Object.fromEntries(results),
-        );
-      }
-    };
-
-    loadFinancials();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [customerList]);
+    return financials;
+  }, [customerList, invoicesList]);
 
   /*
    * Search retailers.
@@ -960,13 +913,13 @@ function CustomersPage() {
   const deleteCustomer = async (
     customer: Customer,
   ) => {
-    if (
-      !window.confirm(
-        `Delete retailer "${customer.name}"?`,
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: `Delete "${customer.name}"?`,
+      description: 'This action cannot be undone. All associated data will remain but the customer record will be removed.',
+      confirmLabel: 'Delete',
+      confirmClassName: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+    });
+    if (!ok) return;
 
     try {
       if (
@@ -994,6 +947,7 @@ function CustomersPage() {
 
   return (
     <AppShell>
+      <ConfirmDialog />
       <PageHeading
         eyebrow="Retailer Management"
         title="Manage your retailers."

@@ -27,6 +27,8 @@ class InvoiceRead(BaseModel):
 
     pdf_path: Optional[str]
 
+    due_date: Optional[datetime] = None
+
     created_at: datetime
 
     model_config = {"from_attributes": True}

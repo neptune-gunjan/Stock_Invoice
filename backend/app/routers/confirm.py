@@ -68,6 +68,13 @@ def confirm_transaction(
             detail=str(exc),
         ) from exc
 
+    except ValueError as exc:
+
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+
     return TransactionRead(
         **transaction.model_dump(),
         invoice_id=invoice.id,
@@ -86,7 +93,13 @@ def get_transaction(
     current_user: User = Depends(get_current_user),
 ) -> TransactionRead:
 
-    result = service.get(transaction_id)
+    if current_user.business_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="User is not associated with a business.",
+        )
+
+    result = service.get(transaction_id, current_user.business_id)
 
     if result is None:
         raise HTTPException(
@@ -96,7 +109,16 @@ def get_transaction(
 
     transaction, items = result
 
+    # Look up the associated invoice to provide required fields
+    from app.dependencies import get_invoice_repository
+    invoice_repo = get_invoice_repository()
+    invoice = invoice_repo.get_by_transaction(
+        transaction_id, current_user.business_id
+    )
+
     return TransactionRead(
         **transaction.model_dump(),
+        invoice_id=invoice.id if invoice else transaction.id,
+        invoice_number=invoice.invoice_number if invoice else "N/A",
         items=items,
     )

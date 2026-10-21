@@ -52,3 +52,12 @@ class StockRepository(ABC):
     ) -> bool:
         """Soft-delete an active stock item."""
         ...
+
+    @abstractmethod
+    def decrement_quantity(
+        self,
+        item_id: uuid.UUID,
+        amount: float,
+    ) -> bool:
+        """Atomically decrement stock quantity if sufficient quantity exists."""
+        ...

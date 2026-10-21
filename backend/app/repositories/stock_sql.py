@@ -82,3 +82,17 @@ class SqlAlchemyStockRepository(StockRepository):
                 session.commit()
                 return True
             return False
+
+    def decrement_quantity(self, item_id: uuid.UUID, amount: float) -> bool:
+        with SessionLocal() as session:
+            row = session.query(SqlStockItem).filter(
+                SqlStockItem.id == item_id,
+                SqlStockItem.quantity_available >= amount
+            ).with_for_update().first()
+            
+            if row:
+                row.quantity_available -= amount
+                row.updated_at = utcnow()
+                session.commit()
+                return True
+            return False

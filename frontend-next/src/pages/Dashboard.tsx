@@ -27,7 +27,7 @@ import {
   History,
   PackagePlus,
   Eye,
-  EyeOff, TrendingUp, IndianRupee, BellRing, Users, Boxes
+  EyeOff, TrendingUp, IndianRupee, BellRing, Users, Boxes, Zap
 } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -324,8 +324,8 @@ export function Dashboard() {
       if (invDate.getTime() === todayDate.getTime()) {
         sales += inv.total_amount;
         count++;
-        if (inv.paid_amount > 0) {
-            if (inv.last_payment_method === 'upi') upi += inv.paid_amount;
+        if (inv.paid_amount && inv.paid_amount > 0) {
+            if (inv.payment_method === 'upi') upi += inv.paid_amount;
             else cash += inv.paid_amount;
         }
       }
@@ -338,42 +338,42 @@ export function Dashboard() {
       label: 'Total sales',
       value: summary.data?.total_sales !== undefined ? money(summary.data.total_sales) : '—',
       note: `${summary.data?.total_invoices ?? '—'} invoices confirmed`,
-      icon: <TrendingUp size={18} />,
+      icon: <TrendingUp size={16} />,
       color: 'text-primary bg-primary/10'
     },
     {
       label: 'Total paid',
       value: summary.data?.total_paid !== undefined ? money(summary.data.total_paid) : '—',
       note: 'payments received',
-      icon: <IndianRupee size={18} />,
+      icon: <IndianRupee size={16} />,
       color: 'text-emerald-600 bg-emerald-600/10'
     },
     {
       label: 'Outstanding / Due',
       value: summary.data?.outstanding_amount !== undefined ? money(summary.data.outstanding_amount) : '—',
       note: summary.data?.outstanding_amount && summary.data.outstanding_amount > 0 ? 'payment still due' : 'all payments settled',
-      icon: <AlertCircle size={18} />,
+      icon: <AlertCircle size={16} />,
       color: 'text-rose-600 bg-rose-600/10'
     },
     {
-      label: 'Customers',
+      label: 'Parties',
       value: summary.data?.total_customers ?? '—',
-      note: 'customers in your records',
-      icon: <Users size={18} />,
+      note: 'parties in your ledger',
+      icon: <Users size={16} />,
       color: 'text-blue-600 bg-blue-600/10'
     },
     {
       label: 'Products',
       value: summary.data?.total_products ?? '—',
       note: 'items in your catalog',
-      icon: <Boxes size={18} />,
+      icon: <Boxes size={16} />,
       color: 'text-amber-600 bg-amber-600/10'
     },
     {
       label: 'Low stock alerts',
       value: summary.data?.low_stock_products ?? '—',
       note: summary.data?.low_stock_products ? 'worth checking today' : 'all shelves look good',
-      icon: <BellRing size={18} />,
+      icon: <BellRing size={16} />,
       color: summary.data?.low_stock_products ? 'text-amber-600 bg-amber-600/10' : 'text-emerald-600 bg-emerald-600/10'
     },
   ];
@@ -384,17 +384,47 @@ export function Dashboard() {
         eyebrow={dateLabel(new Date().toISOString())}
         title={`Welcome back, ${profile.ownerName.split(' ')[0]}.`}
         description="A clear desk makes a calmer counter. Here’s what needs your attention today."
-        action={
-          <Link
-            href="/upload"
-            className={buttonPrimary}
-            data-testid="link-start-invoice"
-          >
-            <FilePlus2 size={17} />
-            New invoice
-          </Link>
-        }
+        action={null}
       />
+
+      <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Link
+          href="/review"
+          className="flex flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-primary/20 bg-primary/5 p-3 text-center transition hover:border-primary/40 hover:bg-primary/10 active:scale-[0.98]"
+        >
+          <div className="grid h-8 w-8 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm shadow-primary/30">
+            <Zap size={16} />
+          </div>
+          <span className="text-xs font-bold text-primary">New Bill</span>
+        </Link>
+        <Link
+          href="/catalog"
+          className="flex flex-col items-center justify-center gap-1.5 rounded-2xl border border-border bg-card p-3 text-center transition hover:border-primary/30 hover:bg-muted active:scale-[0.98]"
+        >
+          <div className="grid h-8 w-8 place-items-center rounded-full bg-amber-50 text-amber-600">
+            <PackagePlus size={16} />
+          </div>
+          <span className="text-xs font-bold text-foreground">Add Stock</span>
+        </Link>
+        <Link
+          href="/customers"
+          className="flex flex-col items-center justify-center gap-1.5 rounded-2xl border border-border bg-card p-3 text-center transition hover:border-primary/30 hover:bg-muted active:scale-[0.98]"
+        >
+          <div className="grid h-8 w-8 place-items-center rounded-full bg-emerald-50 text-emerald-600">
+            <IndianRupee size={16} />
+          </div>
+          <span className="text-xs font-bold text-foreground">Receive Payment</span>
+        </Link>
+        <Link
+          href="/customers"
+          className="flex flex-col items-center justify-center gap-1.5 rounded-2xl border border-border bg-card p-3 text-center transition hover:border-primary/30 hover:bg-muted active:scale-[0.98]"
+        >
+          <div className="grid h-8 w-8 place-items-center rounded-full bg-blue-50 text-blue-600">
+            <UserPlus size={16} />
+          </div>
+          <span className="text-xs font-bold text-foreground">Add Party</span>
+        </Link>
+      </div>
 
       {summary.isError && (
         <div className="mb-6">
@@ -408,17 +438,17 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* Today's Settlement Banner */}
+      {/* Daily Dispatch & Collection Banner */}
       {todayStats.count > 0 && (
-        <div className="mb-6 rounded-2xl bg-primary px-6 py-5 text-primary-foreground flex flex-col lg:flex-row justify-between lg:items-center gap-6">
+        <div className="mb-8 rounded-2xl bg-gradient-to-br from-primary via-blue-600 to-indigo-700 px-6 py-5 text-primary-foreground flex flex-col lg:flex-row justify-between lg:items-center gap-6 shadow-xl shadow-primary/20 border border-white/10">
           <div>
-            <h2 className="text-xl font-extrabold tracking-tight">Today's Settlement</h2>
-            <p className="text-sm opacity-80 mt-1">{todayStats.count} bills generated today</p>
+            <h2 className="text-xl font-extrabold tracking-tight">Daily Dispatch & Collection</h2>
+            <p className="text-sm opacity-80 mt-1">{todayStats.count} challans generated today</p>
             <button 
               onClick={() => setShowCashModal(true)}
               className="mt-3 text-xs bg-white/20 hover:bg-white/30 text-white font-bold py-1.5 px-3 rounded-lg transition"
             >
-              Count Cash Drawer (Galla)
+              Record Daily Recovery
             </button>
           </div>
           <div className="flex flex-wrap gap-6">
@@ -439,7 +469,7 @@ export function Dashboard() {
       )}
 
       {/* Dashboard summary */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 xl:grid-cols-6">
         {stats.map((stat, i) => {
           const isLowStock =
             stat.label === 'Low stock alerts' &&
@@ -452,7 +482,7 @@ export function Dashboard() {
           return (
             <SectionCard
               key={stat.label}
-              className={`rise-in p-5 ${
+              className={`rise-in p-3 transition-all duration-300 hover:shadow-sm hover:-translate-y-0.5 hover:border-primary/30 ${
                 isLowStock
                   ? 'border-secondary/70 bg-secondary/10'
                   : isOutstanding
@@ -461,32 +491,32 @@ export function Dashboard() {
               }`}
             >
               <div className="flex items-start justify-between">
-                <div className={`grid h-10 w-10 place-items-center rounded-xl ${stat.color || 'bg-primary/10 text-primary'}`}>
+                <div className={`grid h-6 w-6 place-items-center rounded-md ${stat.color || 'bg-primary/10 text-primary'}`}>
                   {stat.icon}
                 </div>
 
                 {isLowStock && (
-                  <span className="rounded-full bg-secondary/20 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-secondary-foreground">
+                  <span className="rounded-full bg-secondary/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-secondary-foreground">
                     Attention
                   </span>
                 )}
 
                 {isOutstanding && (
-                  <span className="rounded-full bg-accent/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-accent">
+                  <span className="rounded-full bg-accent/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-accent">
                     Due
                   </span>
                 )}
               </div>
 
-              <p className="mt-7 text-3xl font-extrabold tracking-[-.06em] sm:text-4xl">
+              <p className="mt-2 text-lg font-extrabold tracking-[-.04em] truncate">
                 {stat.value}
               </p>
 
-              <p className="mt-1 text-sm font-bold">
+              <p className="mt-0.5 text-xs font-bold truncate">
                 {stat.label}
               </p>
 
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground line-clamp-1">
                 {stat.note}
               </p>
             </SectionCard>
@@ -506,12 +536,12 @@ export function Dashboard() {
 
       {/* Recent invoices + Shelf check + Khata Overdues */}
       <div className="mt-7 grid gap-6 xl:grid-cols-[1fr_.6fr_.6fr]">
-        <SectionCard>
+        <SectionCard className="shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between border-b border-border px-5 py-5">
             <div>
               <h2 className="font-extrabold">Recent invoices</h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                The latest from your counter.
+                Latest orders dispatched.
               </p>
             </div>
 
@@ -541,7 +571,7 @@ export function Dashboard() {
 
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-bold">
-                      {invoice.customer_name || 'Walk-in customer'}
+                      {invoice.customer_name || 'Cash Party'}
                     </p>
 
                     <p className="mt-1 text-xs text-muted-foreground">
@@ -581,8 +611,8 @@ export function Dashboard() {
           )}
         </SectionCard>
 
-        <SectionCard className="overflow-hidden">
-          <div className="border-b border-border bg-primary p-5 text-primary-foreground">
+        <SectionCard className="overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+          <div className="border-b border-border bg-gradient-to-r from-blue-600 to-primary p-5 text-primary-foreground">
             <p className="mono text-[10px] uppercase tracking-[.18em] text-primary-foreground/60">
               Shelf check
             </p>
@@ -647,10 +677,10 @@ export function Dashboard() {
         </SectionCard>
 
         {/* Khata Overdues Card */}
-        <SectionCard className="overflow-hidden">
-          <div className="border-b border-border bg-orange-100 p-5 text-orange-950">
+        <SectionCard className="overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+          <div className="border-b border-border bg-gradient-to-r from-orange-100 to-amber-100 p-5 text-orange-950">
             <p className="mono text-[10px] uppercase tracking-[.18em] text-orange-900/60">
-              Khata Overdues
+              Market Outstanding
             </p>
 
             <h2 className="mt-8 text-2xl font-extrabold tracking-[-.04em]">
@@ -701,7 +731,7 @@ export function Dashboard() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-2xl overflow-y-auto max-h-[90vh]">
             <div className="flex justify-between items-center mb-6 border-b border-border pb-4">
-              <h3 className="text-xl font-bold">End of Day Cash Count</h3>
+              <h3 className="text-xl font-bold">End of Day Recovery Count</h3>
               <button onClick={() => setShowCashModal(false)} className="text-muted-foreground hover:text-foreground">
                 <X size={20} />
               </button>

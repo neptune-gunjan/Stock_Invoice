@@ -16,7 +16,7 @@ class SqlAlchemyPasswordResetTokenRepository(PasswordResetTokenRepository):
             user_id=row.user_id,
             token_hash=row.token_hash,
             expires_at=row.expires_at,
-            used=row.used,
+            used_at=utcnow() if row.used else None,
             created_at=row.created_at
         )
 
@@ -35,7 +35,7 @@ class SqlAlchemyPasswordResetTokenRepository(PasswordResetTokenRepository):
                 user_id=token.user_id,
                 token_hash=token.token_hash,
                 expires_at=token.expires_at,
-                used=token.used,
+                used=token.is_used,
                 created_at=token.created_at
             )
             session.add(row)
@@ -46,7 +46,7 @@ class SqlAlchemyPasswordResetTokenRepository(PasswordResetTokenRepository):
         with SessionLocal() as session:
             row = session.query(SqlPasswordResetToken).filter(SqlPasswordResetToken.id == token.id).first()
             if row:
-                row.used = token.used
+                row.used = token.is_used
                 session.commit()
             return token
 

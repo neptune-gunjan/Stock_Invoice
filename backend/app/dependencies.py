@@ -77,7 +77,7 @@ def get_current_user(
 
     user = repository.get(user_id)
 
-    if user is None:
+    if user is None or not user.is_active or user.is_deleted:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found or inactive",
@@ -212,6 +212,9 @@ def get_transaction_service(
     payment_repository: PaymentRepository = Depends(
         get_payment_repository
     ),
+    business_repository: BusinessRepository = Depends(
+        get_business_repository
+    ),
 ) -> TransactionService:
 
     return TransactionService(
@@ -221,6 +224,7 @@ def get_transaction_service(
         stock_movement_repository,
         invoice_repository,
         payment_repository,
+        business_repository,
     )
 
 

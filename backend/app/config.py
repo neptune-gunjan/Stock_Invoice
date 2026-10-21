@@ -12,12 +12,14 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    environment: str = "development"
     upload_dir: Path = Path("uploads")
 
     # Which ExtractionProvider implementation to use. See
@@ -52,6 +54,12 @@ class Settings(BaseSettings):
     resend_api_key: Optional[str] = None
     resend_from_email: str = "onboarding@resend.dev"
     frontend_url: str = "http://localhost:5173"
+
+    @model_validator(mode="after")
+    def validate_production_secrets(self) -> 'Settings':
+        if self.environment.lower() == "production" and self.jwt_secret_key == "change-this-secret-key-in-production":
+            raise ValueError("JWT_SECRET_KEY must be changed in production environment.")
+        return self
 
 
 @lru_cache

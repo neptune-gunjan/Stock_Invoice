@@ -653,7 +653,7 @@ function UploadPage() {
   return (
     <AppShell>
       <PageHeading
-        eyebrow="New invoice"
+        eyebrow="AI Bill Scanner"
         title="Bring the note to the desk."
         description="Upload a clear photo of the handwritten order. We’ll suggest matches, then you check every line before anything is confirmed."
       />

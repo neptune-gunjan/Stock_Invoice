@@ -34,6 +34,10 @@ class Business(BaseModel):
 
     logo_path: Optional[str] = None
 
+    bank_name: Optional[str] = None
+    bank_account_number: Optional[str] = None
+    bank_ifsc: Optional[str] = None
+
     is_active: bool = True
 
     created_at: datetime = Field(default_factory=utcnow)

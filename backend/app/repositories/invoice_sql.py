@@ -26,6 +26,7 @@ class SqlAlchemyInvoiceRepository(InvoiceRepository):
             payment_status=row.payment_status,
             payment_method=row.payment_method,
             pdf_path=row.pdf_path,
+            due_date=row.due_date,
             created_at=row.created_at,
             updated_at=row.updated_at,
             deleted_at=row.deleted_at
@@ -48,6 +49,7 @@ class SqlAlchemyInvoiceRepository(InvoiceRepository):
                 payment_status=invoice.payment_status,
                 payment_method=invoice.payment_method,
                 pdf_path=invoice.pdf_path,
+                due_date=invoice.due_date,
                 created_at=invoice.created_at,
                 updated_at=invoice.updated_at,
                 deleted_at=invoice.deleted_at
@@ -62,6 +64,14 @@ class SqlAlchemyInvoiceRepository(InvoiceRepository):
                 SqlInvoice.id == invoice_id,
                 SqlInvoice.business_id == business_id
             ).first()
+            return self._to_pydantic(row) if row else None
+
+    def lock_and_get(self, invoice_id: uuid.UUID, business_id: uuid.UUID) -> Optional[Invoice]:
+        with SessionLocal() as session:
+            row = session.query(SqlInvoice).filter(
+                SqlInvoice.id == invoice_id,
+                SqlInvoice.business_id == business_id
+            ).with_for_update().first()
             return self._to_pydantic(row) if row else None
 
     def get_by_number(self, invoice_number: str, business_id: uuid.UUID) -> Optional[Invoice]:
@@ -107,6 +117,7 @@ class SqlAlchemyInvoiceRepository(InvoiceRepository):
                 row.payment_status = invoice.payment_status
                 row.payment_method = invoice.payment_method
                 row.pdf_path = invoice.pdf_path
+                row.due_date = invoice.due_date
                 row.updated_at = utcnow()
                 row.deleted_at = invoice.deleted_at
                 session.commit()

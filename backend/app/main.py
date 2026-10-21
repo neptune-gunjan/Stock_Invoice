@@ -23,12 +23,14 @@ from app.routers.whatsapp import router as whatsapp_router
 
 app = FastAPI(title="Stock & Invoice Assistant")
 
-# Allow the minimal frontend (served from file:// or localhost) to call this API
+# Configure explicit origins for production safety
+frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[frontend_url, "http://localhost:5173", "http://127.0.0.1:5173"],
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_credentials=True,
 )
 
 app.include_router(stock_router)

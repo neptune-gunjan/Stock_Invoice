@@ -72,6 +72,13 @@ async def extract_image(
             detail="Uploaded file is empty.",
         )
 
+    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB limit
+    if len(image_bytes) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File size exceeds the 10MB limit.",
+        )
+
     # Run extraction
     try:
         job = service.run_extraction(

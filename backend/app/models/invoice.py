@@ -44,6 +44,7 @@ class Invoice(BaseModel):
     payment_method: Optional[str] = None
 
     pdf_path: Optional[str] = None
+    due_date: Optional[datetime] = None
 
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)

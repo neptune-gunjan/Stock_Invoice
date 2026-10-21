@@ -172,6 +172,7 @@ export interface Invoice {
   payment_method: string | null;
   pdf_path: string | null;
   created_at: string;
+  due_date: string | null;
   paid_amount?: number;
   remaining_amount?: number;
 }
@@ -262,6 +263,9 @@ export interface Business {
   address: string | null;
   gst_number: string | null;
   upi_vpa: string | null;
+  bank_name: string | null;
+  bank_account_number: string | null;
+  bank_ifsc: string | null;
   invoice_prefix: string;
   logo_path: string | null;
   is_active: boolean;
@@ -383,6 +387,9 @@ export const endpoints = {
 
   listInvoices: () =>
     apiJson<Invoice[]>('/invoices'),
+
+  exportCsv: () =>
+    apiBlob('/invoices/export'),
 
   getInvoice: (id: string) =>
     apiJson<InvoiceDetail>(`/invoices/${id}`),

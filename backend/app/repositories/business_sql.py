@@ -23,6 +23,9 @@ class SqlAlchemyBusinessRepository(BusinessRepository):
             upi_vpa=row.upi_vpa,
             invoice_prefix=row.invoice_prefix,
             logo_path=row.logo_path,
+            bank_name=row.bank_name,
+            bank_account_number=row.bank_account_number,
+            bank_ifsc=row.bank_ifsc,
             is_active=row.is_active,
             created_at=row.created_at,
             updated_at=row.updated_at,
@@ -42,6 +45,9 @@ class SqlAlchemyBusinessRepository(BusinessRepository):
             upi_vpa=business.upi_vpa,
             invoice_prefix=business.invoice_prefix,
             logo_path=business.logo_path,
+            bank_name=business.bank_name,
+            bank_account_number=business.bank_account_number,
+            bank_ifsc=business.bank_ifsc,
             is_active=business.is_active,
             created_at=business.created_at,
             updated_at=business.updated_at,
@@ -81,6 +87,9 @@ class SqlAlchemyBusinessRepository(BusinessRepository):
                 row.upi_vpa = business.upi_vpa
                 row.invoice_prefix = business.invoice_prefix
                 row.logo_path = business.logo_path
+                row.bank_name = business.bank_name
+                row.bank_account_number = business.bank_account_number
+                row.bank_ifsc = business.bank_ifsc
                 row.is_active = business.is_active
                 row.updated_at = utcnow()
                 row.deleted_at = business.deleted_at
@@ -95,3 +104,15 @@ class SqlAlchemyBusinessRepository(BusinessRepository):
                 session.commit()
                 return True
             return False
+
+    def increment_invoice_counter(self, business_id: uuid.UUID) -> int:
+        with SessionLocal() as session:
+            row = session.query(SqlBusiness).filter(SqlBusiness.id == business_id).with_for_update().first()
+            if row:
+                if row.invoice_counter is None:
+                    row.invoice_counter = 0
+                row.invoice_counter += 1
+                counter = row.invoice_counter
+                session.commit()
+                return counter
+            return 0
